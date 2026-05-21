@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>職場實務練習 - 客戶編號核對</title>
+    <style>
+        body { font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; background-color: #fef5f5; padding: 15px; }
+        .container { max-width: 650px; margin: auto; background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        h2 { color: #c0392b; text-align: center; }
+        .input-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; }
+        input[type="text"] { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+        
+        .task-box { border: 3px solid #e74c3c; padding: 20px; border-radius: 15px; margin-bottom: 25px; background-color: #fff9f9; text-align: center; }
+        .customer-num { font-family: "Courier New", Courier, monospace; font-size: 2.2em; font-weight: bold; letter-spacing: 2px; color: #2c3e50; display: block; margin: 15px 0; background: #eee; padding: 10px; border-radius: 5px; }
+        
+        .option-btn { width: 100%; padding: 15px; background-color: #ffffff; color: #333; text-align: center; margin-bottom: 12px; border: 2px solid #bdc3c7; border-radius: 10px; font-family: "Courier New", monospace; font-size: 1.4em; font-weight: bold; cursor: pointer; }
+        .option-btn:active { background-color: #f2f2f2; transform: scale(0.98); }
+        
+        #report { white-space: pre-wrap; background: #fafafa; padding: 20px; border: 2px dashed #7f8c8d; font-size: 1.1em; }
+        .hidden { display: none; }
+        .teacher-note { background-color: #d35400; color: white; padding: 15px; border-radius: 10px; margin-top: 20px; text-align: center; font-weight: bold; font-size: 1.2em; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="login-screen">
+        <h2>職場實務練習：<br>編號精確核對</h2>
+        <div class="input-group">
+            <label>學生姓名：</label>
+            <input type="text" id="studentName" placeholder="請輸入姓名">
+        </div>
+        <div class="input-group">
+            <label>班別：</label>
+            <input type="text" id="studentClass" placeholder="請輸入班別">
+        </div>
+        <button onclick="startApp()" style="width:100%; padding:15px; background:#c0392b; color:white; border:none; border-radius:10px; font-size:1.2em; cursor:pointer;">開始練習</button>
+    </div>
+
+    <div id="task-screen" class="hidden">
+        <div style="text-align:center; font-weight:bold; color:#7f8c8d; margin-bottom:10px;" id="progress-text">進度：1 / 60</div>
+        <div class="task-box">
+            <p style="margin:0; font-size:1.1em;">請仔細觀察，找出與下方<strong>完全相同</strong>的編號：</p>
+            <span id="target-code" class="customer-num"></span>
+        </div>
+        <div id="options-container"></div>
+    </div>
+
+    <div id="report-screen" class="hidden">
+        <h2>練習評估報告</h2>
+        <div id="report"></div>
+        <div class="teacher-note">
+            ⚠️ 練習完畢。請舉手並通知老師前來記錄成績。
+        </div>
+        <button onclick="location.reload()" style="width:100%; margin-top:20px; padding:10px; background:#7f8c8d; color:white; border:none; border-radius:5px;">重新開始</button>
+    </div>
+</div>
+
+<script>
+    let currentTask = 0;
+    let score = 0;
+    const totalTasks = 60;
+    let studentInfo = { name: "", class: "" };
+
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789@#$%&*";
+
+    // 生成隨機客戶編號
+    function generateCode(length = 8) {
+        let result = "";
+        for (let i = 0; i < length; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+    }
+
+    // 生成非常相似的錯誤選項
+    function generateSimilarCode(original) {
+        let arr = original.split('');
+        let indexToChange = Math.floor(Math.random() * arr.length);
+        let newChar = chars.charAt(Math.floor(Math.random() * chars.length));
+        
+        // 確保新字符跟舊的不同
+        while(newChar === arr[indexToChange]) {
+            newChar = chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        
+        arr[indexToChange] = newChar;
+        return arr.join('');
+    }
+
+    function startApp() {
+        studentInfo.name = document.getElementById('studentName').value;
+        studentInfo.class = document.getElementById('studentClass').value;
+        if (!studentInfo.name || !studentInfo.class) {
+            alert("請完整輸入姓名和班別。");
+            return;
+        }
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('task-screen').classList.remove('hidden');
+        loadTask();
+    }
+
+    function loadTask() {
+        if (currentTask >= totalTasks) {
+            showReport();
+            return;
+        }
+
+        document.getElementById('progress-text').innerText = `進度：${currentTask + 1} / ${totalTasks}`;
+        
+        const target = generateCode(8);
+        document.getElementById('target-code').innerText = target;
+
+        const optionsContainer = document.getElementById('options-container');
+        optionsContainer.innerHTML = '';
+
+        let choices = [];
+        choices.push({ text: target, correct: true }); // 正確答案
+
+        // 生成4個極度相似的錯誤答案
+        while(choices.length < 5) {
+            let fake = generateSimilarCode(target);
+            if(!choices.find(c => c.text === fake)) {
+                choices.push({ text: fake, correct: false });
+            }
+        }
+
+        // 隨機排列
+        choices.sort(() => Math.random() - 0.5);
+
+        choices.forEach(item => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            btn.innerText = item.text;
+            btn.onclick = () => {
+                if (item.correct) score++;
+                currentTask++;
+                loadTask();
+            };
+            optionsContainer.appendChild(btn);
+        });
+    }
+
+    function showReport() {
+        document.getElementById('task-screen').classList.add('hidden');
+        document.getElementById('report-screen').classList.remove('hidden');
+        
+        const reportContent = `
+練習員：${studentInfo.name}
+班別：${studentInfo.class}
+---------------------------
+練習項目：客戶編號精確核對
+完成題數：${totalTasks} 題
+答對題數：${score} 題
+正確率：${((score/totalTasks)*100).toFixed(1)}%
+---------------------------
+評語：學生已完成視覺辨識專注力訓練。
+        `;
+        document.getElementById('report').innerText = reportContent;
+    }
+</script>
+
+</body>
+</html>

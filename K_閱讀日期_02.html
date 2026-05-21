@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>職場實務練習 - 有效日期檢查 (中文版)</title>
+    <style>
+        body { font-family: "PingFang TC", "Heiti TC", sans-serif; background-color: #f0f7ff; padding: 15px; line-height: 1.5; }
+        .container { max-width: 650px; margin: auto; background: white; padding: 25px; border-radius: 20px; box-shadow: 0 8px 20px rgba(0,0,0,0.15); }
+        h2 { color: #2980b9; text-align: center; font-size: 1.5em; }
+        .input-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #34495e; }
+        input[type="text"] { width: 100%; padding: 12px; border: 2px solid #bdc3c7; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+        button { width: 100%; padding: 15px; background-color: #27ae60; color: white; border: none; border-radius: 10px; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        button:active { background-color: #1e8449; transform: translateY(2px); }
+        .option-btn { background-color: #ffffff; color: #2c3e50; text-align: center; margin-bottom: 12px; border: 2px solid #3498db; transition: 0.2s; }
+        .option-btn:hover { background-color: #ebf5fb; }
+        .progress { font-size: 1.1em; color: #7f8c8d; margin-bottom: 15px; text-align: center; font-weight: bold; }
+        .task-box { border: 3px solid #e67e22; padding: 20px; border-radius: 15px; margin-bottom: 25px; background-color: #fffaf0; }
+        #report { white-space: pre-wrap; background: #fdfdfd; padding: 20px; border: 2px dashed #95a5a6; font-family: monospace; font-size: 1.1em; line-height: 1.8; }
+        .hidden { display: none; }
+        .highlight-date { color: #c0392b; font-size: 1.4em; display: block; margin-top: 10px; text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="login-screen">
+        <h2>職場實務練習<br>(有效日期辨識)</h2>
+        <div class="input-group">
+            <label>學生姓名：</label>
+            <input type="text" id="studentName" placeholder="請輸入姓名">
+        </div>
+        <div class="input-group">
+            <label>班別：</label>
+            <input type="text" id="studentClass" placeholder="請輸入班別">
+        </div>
+        <button onclick="startApp()">開始練習</button>
+    </div>
+
+    <div id="task-screen" class="hidden">
+        <div class="progress" id="progress-text">題目：1 / 60</div>
+        <div class="task-box">
+            <p style="font-size: 1.1em; margin: 0;">請找出比下面日期<strong>更早(已過期)</strong>的日期：</p>
+            <strong id="target-date-display" class="highlight-date"></strong>
+        </div>
+        <div id="options-container">
+            </div>
+    </div>
+
+    <div id="report-screen" class="hidden">
+        <h2 style="color: #27ae60;">練習完成！</h2>
+        <div id="report"></div>
+        <div style="background-color: #f39c12; color: white; padding: 15px; border-radius: 10px; margin-top: 20px; text-align: center;">
+            <p style="margin: 0; font-size: 1.2em; font-weight: bold;">請舉手通知老師前來記錄成績</p>
+        </div>
+        <button onclick="location.reload()" style="background-color: #95a5a6;">重新開始</button>
+    </div>
+</div>
+
+<script>
+    let currentTask = 0;
+    let score = 0;
+    const totalTasks = 60;
+    let studentInfo = { name: "", class: "" };
+
+    // 將 Date 物件轉換為「2026年3月21日」格式
+    function formatDateToChinese(date) {
+        const y = date.getFullYear();
+        const m = date.getMonth() + 1;
+        const d = date.getDate();
+        return `${y}年${m}月${d}日`;
+    }
+
+    // 隨機生成日期物件
+    function getRandomDateObj(start, end) {
+        return new Date(start.getTime() + Math.random() * (end.getTime() - start.getTime()));
+    }
+
+    function startApp() {
+        studentInfo.name = document.getElementById('studentName').value;
+        studentInfo.class = document.getElementById('studentClass').value;
+
+        if (!studentInfo.name || !studentInfo.class) {
+            alert("請輸入姓名及班別後再開始。");
+            return;
+        }
+
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('task-screen').classList.remove('hidden');
+        loadTask();
+    }
+
+    function loadTask() {
+        if (currentTask >= totalTasks) {
+            showReport();
+            return;
+        }
+
+        document.getElementById('progress-text').innerText = `進度：${currentTask + 1} / ${totalTasks}`;
+        
+        // 設定基準日期 (2025年期間)
+        const targetDate = getRandomDateObj(new Date(2025, 0, 1), new Date(2025, 11, 31));
+        document.getElementById('target-date-display').innerText = formatDateToChinese(targetDate);
+
+        const optionsContainer = document.getElementById('options-container');
+        optionsContainer.innerHTML = '';
+
+        let options = [];
+        
+        // 1個正確答案：過期的日期 (早於基準日)
+        const expiredDate = getRandomDateObj(new Date(2023, 0, 1), new Date(targetDate.getTime() - 86400000 * 2));
+        options.push({ dateStr: formatDateToChinese(expiredDate), correct: true });
+
+        // 4個錯誤答案：未過期的日期 (晚於基準日)
+        for(let i=0; i<4; i++) {
+            const validDate = getRandomDateObj(new Date(targetDate.getTime() + 86400000 * 2), new Date(2027, 11, 31));
+            options.push({ dateStr: formatDateToChinese(validDate), correct: false });
+        }
+
+        // 打亂選項順序
+        options.sort(() => Math.random() - 0.5);
+
+        options.forEach(item => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            btn.innerText = item.dateStr;
+            btn.onclick = () => {
+                if (item.correct) score++;
+                currentTask++;
+                loadTask();
+            };
+            optionsContainer.appendChild(btn);
+        });
+    }
+
+    function showReport() {
+        document.getElementById('task-screen').classList.add('hidden');
+        document.getElementById('report-screen').classList.remove('hidden');
+        
+        const now = new Date();
+        const timeString = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${now.getHours()}:${now.getMinutes()}`;
+        
+        const reportContent = `
+【 學生練習成績單 】
+---------------------------
+學生姓名：${studentInfo.name}
+學生班別：${studentInfo.class}
+完成日期：${timeString}
+練習目標：辨識過期日期 (中文格式)
+---------------------------
+總題數：${totalTasks} 題
+答對題數：${score} 題
+得分：${Math.round((score/totalTasks)*100)} 分
+---------------------------
+狀態：練習已完成
+        `;
+        document.getElementById('report').innerText = reportContent;
+    }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HK 收銀員找續考核系統 (60題挑戰版)</title>
+    <style>
+        :root {
+            --hk-gold: #f1c40f;
+            --hk-red: #e74c3c;
+            --hk-dark: #2c3e50;
+            --bg: #dfe6e9;
+        }
+        body { font-family: "Microsoft JhengHei", sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        
+        .container { width: 480px; background: white; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.2); overflow: hidden; }
+        .hidden { display: none !important; }
+
+        .page { padding: 40px; text-align: center; }
+        .page h1 { color: var(--hk-dark); margin-bottom: 30px; }
+        input[type="text"] { width: 80%; padding: 12px; margin: 10px 0; border: 2px solid #ddd; border-radius: 8px; font-size: 1.1em; text-align: center; }
+
+        .header { background: var(--hk-dark); color: white; padding: 15px; text-align: center; display: flex; justify-content: space-between; align-items: center; }
+        .receipt-box { padding: 25px; }
+        .receipt { background: #fafafa; border: 1px solid #eee; padding: 15px; border-radius: 5px; font-family: monospace; margin-bottom: 20px; }
+        .item-row { display: flex; justify-content: space-between; margin-bottom: 5px; border-bottom: 1px dashed #eee; padding-bottom: 5px; }
+        .total-row { display: flex; justify-content: space-between; font-weight: bold; font-size: 1.3em; margin-top: 10px; color: #2c3e50; }
+
+        .payment-info { background: #fff9c4; border: 2px solid #f1c40f; padding: 15px; border-radius: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .note-val { font-size: 1.6em; font-weight: bold; color: #c0392b; }
+
+        .answer-box { text-align: center; margin-bottom: 20px; }
+        input[type="number"] { width: 150px; padding: 10px; font-size: 1.5em; border: 3px solid var(--hk-dark); border-radius: 8px; text-align: center; }
+
+        .btn { width: 100%; padding: 15px; border: none; border-radius: 10px; font-size: 1.2em; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .btn-start { background: var(--hk-dark); color: white; }
+        .btn-submit { background: #2980b9; color: white; }
+        .btn-next { background: #27ae60; color: white; }
+        .feedback { min-height: 25px; margin: 10px 0; font-weight: bold; font-size: 1.1em; }
+
+        .report-table { width: 100%; text-align: left; margin-top: 20px; border-collapse: collapse; }
+        .report-table th, .report-table td { padding: 10px; border-bottom: 1px solid #eee; }
+    </style>
+</head>
+<body>
+
+<div id="login-page" class="container page">
+    <h1>收銀員實戰考核 (60題)</h1>
+    <p>請輸入個人資料開始考核：</p>
+    <input type="text" id="student-name" placeholder="學生姓名">
+    <input type="text" id="student-class" placeholder="班別">
+    <button class="btn btn-start" onclick="startExercise()">進入店舖</button>
+</div>
+
+<div id="exercise-page" class="container hidden">
+    <div class="header">
+        <span id="display-info">姓名</span>
+        <span>題次：<span id="round-num">1</span> / 60</span>
+    </div>
+    
+    <div class="receipt-box">
+        <div id="receipt-content" class="receipt"></div>
+
+        <div class="payment-info">
+            <span>客人支付紙幣面額：</span>
+            <span class="note-val" id="payment-note">$0</span>
+        </div>
+
+        <div class="answer-box">
+            <p>請找回正確金額：</p>
+            <input type="number" id="user-ans" placeholder="0.0" step="0.1">
+            <div id="feedback" class="feedback"></div>
+        </div>
+
+        <button id="submit-btn" class="btn btn-submit" onclick="validateAnswer()">確認提交</button>
+        <button id="next-btn" class="btn btn-next hidden" onclick="nextQuestion()">下一位顧客</button>
+    </div>
+</div>
+
+<div id="report-page" class="container page hidden">
+    <h1 style="color: #27ae60;">特訓完成！</h1>
+    <div id="report-summary"></div>
+    <button class="btn btn-start" style="margin-top:20px;" onclick="location.reload()">重新挑戰</button>
+</div>
+
+<script>
+    const ITEMS = [
+        { n: "菠蘿油", p: 14.5 }, { n: "凍檸茶", p: 18.0 }, { n: "蛋撻", p: 7.5 },
+        { n: "餐蛋麵", p: 32.0 }, { n: "紅豆冰", p: 25.5 }, { n: "西多士", p: 28.0 },
+        { n: "報紙", p: 10.0 }, { n: "紙巾", p: 4.5 }, { n: "燒賣", p: 12.0 },
+        { n: "奶油多", p: 12.5 }, { n: "火腿通粉", p: 29.0 }, { n: "熱咖啡", p: 16.0 }
+    ];
+    const NOTES = [20, 50, 100, 500];
+
+    let session = {
+        name: "", class: "",
+        round: 1, totalRounds: 60, // 修改為 60 題
+        errors: 0, 
+        currentChange: 0,
+        startTime: null
+    };
+
+    function startExercise() {
+        const name = document.getElementById('student-name').value;
+        const cls = document.getElementById('student-class').value;
+        if (!name || !cls) return alert("請輸入完整資料");
+
+        session.name = name; session.class = cls;
+        session.startTime = new Date();
+        document.getElementById('display-info').innerText = `${cls} - ${name}`;
+        
+        document.getElementById('login-page').classList.add('hidden');
+        document.getElementById('exercise-page').classList.remove('hidden');
+        generateQuestion();
+    }
+
+    function generateQuestion() {
+        const receipt = document.getElementById('receipt-content');
+        const nextBtn = document.getElementById('next-btn');
+        const submitBtn = document.getElementById('submit-btn');
+        const input = document.getElementById('user-ans');
+        
+        document.getElementById('feedback').innerText = "";
+        document.getElementById('round-num').innerText = session.round;
+        input.value = "";
+        input.disabled = false;
+        submitBtn.classList.remove('hidden');
+        nextBtn.classList.add('hidden');
+
+        // 生成購物項目 (隨機 1-3 樣)
+        let count = Math.floor(Math.random() * 3) + 1;
+        let total = 0;
+        let html = "";
+        for (let i=0; i<count; i++) {
+            let item = ITEMS[Math.floor(Math.random() * ITEMS.length)];
+            html += `<div class="item-row"><span>${item.n}</span><span>$${item.p.toFixed(1)}</span></div>`;
+            total += item.p;
+        }
+        html += `<div class="total-row"><span>總計：</span><span>$${total.toFixed(1)}</span></div>`;
+        receipt.innerHTML = html;
+
+        // 生成支付金額 (確保大於總計)
+        let payment = NOTES.find(n => n >= total) || 500;
+        // 有機率出現客人拿更大的面額
+        if (Math.random() > 0.7 && payment < 500) {
+            const nextIdx = NOTES.indexOf(payment) + 1;
+            payment = NOTES[nextIdx];
+        }
+
+        document.getElementById('payment-note').innerText = `$${payment}`;
+        session.currentChange = payment - total;
+        setTimeout(() => input.focus(), 100);
+    }
+
+    function validateAnswer() {
+        const userVal = parseFloat(document.getElementById('user-ans').value);
+        const feedback = document.getElementById('feedback');
+        
+        if (isNaN(userVal)) return;
+
+        // 使用 0.01 誤差範圍避免浮點數計算問題
+        if (Math.abs(userVal - session.currentChange) < 0.01) {
+            feedback.innerHTML = "✓ 正確！請按下一步。";
+            feedback.style.color = "#27ae60";
+            document.getElementById('submit-btn').classList.add('hidden');
+            document.getElementById('next-btn').classList.remove('hidden');
+            document.getElementById('user-ans').disabled = true;
+        } else {
+            feedback.innerHTML = "❌ 找續金額不對，請重新計算！";
+            feedback.style.color = "#e74c3c";
+            session.errors++;
+        }
+    }
+
+    function nextQuestion() {
+        if (session.round < session.totalRounds) {
+            session.round++;
+            generateQuestion();
+        } else {
+            showReport();
+        }
+    }
+
+    function showReport() {
+        document.getElementById('exercise-page').classList.add('hidden');
+        const reportPage = document.getElementById('report-page');
+        const summary = document.getElementById('report-summary');
+        reportPage.classList.remove('hidden');
+
+        const endTime = new Date();
+        const duration = Math.floor((endTime - session.startTime) / 1000);
+        const minutes = Math.floor(duration / 60);
+        const seconds = duration % 60;
+
+        summary.innerHTML = `
+            <table class="report-table">
+                <tr><th>學生姓名</th><td>${session.name}</td></tr>
+                <tr><th>所屬班別</th><td>${session.class}</td></tr>
+                <tr><th>完成總數</th><td>${session.totalRounds} 題</td></tr>
+                <tr><th>計算失誤</th><td><span style="color:red">${session.errors}</span> 次</td></tr>
+                <tr><th>消耗時間</th><td>${minutes}分${seconds}秒</td></tr>
+                <tr><th>考核日期</th><td>${endTime.toLocaleDateString()}</td></tr>
+            </table>
+            <p style="margin-top:20px; font-weight:bold; font-size: 1.2em;">
+                ${session.errors === 0 ? "🏆 完美達標！你是金牌收銀員！" : 
+                  session.errors < 5 ? "✨ 表現優異，非常接近完美！" : "💪 完成特訓！下次嘗試減少失誤。"}
+            </p>
+        `;
+    }
+</script>
+</body>
+</html>

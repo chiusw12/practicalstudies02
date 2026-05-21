@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>全能貼紙精準度特訓 - 觸控優化版</title>
+    <style>
+        :root {
+            --primary: #34495e;
+            --success: #27ae60;
+            --error: #e74c3c;
+            --bg: #ecf0f1;
+        }
+        /* 防止 iPad 觸控時出現原生選單或彈跳效果 */
+        * { touch-action: none; -webkit-user-select: none; }
+        
+        body { font-family: "Microsoft JhengHei", sans-serif; background: var(--bg); margin: 0; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        
+        .overlay { position: fixed; inset: 0; background: white; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        .hidden { display: none !important; }
+        
+        /* 調整寬度以適應平板橫屏 */
+        #game-container { width: 95vw; height: 90vh; max-width: 1000px; background: white; border-radius: 15px; box-shadow: 0 20px 50px rgba(0,0,0,0.15); position: relative; display: flex; border: 5px solid #bdc3c7; }
+        
+        #sidebar { width: 200px; background: #2c3e50; color: white; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+        #sidebar h2 { font-size: 1.1em; border-bottom: 1px solid #5d6d7e; padding-bottom: 10px; }
+        .stat-val { font-size: 1.4em; color: #f1c40f; font-weight: bold; }
+        
+        #workspace { flex-grow: 1; position: relative; overflow: hidden; background: #ffffff; }
+        
+        .target { 
+            position: absolute; border: 3px dashed; border-radius: 50%; 
+            display: flex; align-items: center; justify-content: center; box-sizing: border-box;
+            transition: 0.3s; pointer-events: none;
+        }
+        .target::after { content: '+'; opacity: 0.3; }
+
+        .sticker { 
+            position: absolute; border-radius: 50%; cursor: grab; 
+            z-index: 10; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            display: flex; align-items: center; justify-content: center; 
+            color: white; font-weight: bold; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+        /* 觸控中的視覺反饋 */
+        .sticker.dragging { cursor: grabbing; transform: scale(1.2); box-shadow: 0 12px 20px rgba(0,0,0,0.4); z-index: 100; opacity: 0.9; }
+
+        #btn-area { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+        .action-btn { padding: 15px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 1em; }
+        #check-btn { background: #27ae60; color: white; }
+        #next-btn { background: #3498db; color: white; }
+        
+        .noise { position: absolute; pointer-events: none; opacity: 0.05; font-weight: bold; z-index: 0; }
+    </style>
+</head>
+<body>
+
+<div id="login-screen" class="overlay">
+    <h1>全能貼紙觀察力特訓</h1>
+    <p>規則：將貼紙拖曳至「顏色」與「大小」皆相同的目標框內。</p>
+    <input type="text" id="name" placeholder="學生姓名" style="font-size:1.1em; padding:12px; width:250px; margin:5px;"><br>
+    <input type="text" id="class" placeholder="班別" style="font-size:1.1em; padding:12px; width:250px; margin:5px;"><br><br>
+    <button onclick="startGame()" style="padding:15px 40px; font-size:1.2em; background:#2c3e50; color:white; border:none; border-radius:8px; cursor:pointer;">開始挑戰 (共60題)</button>
+</div>
+
+<div id="game-container">
+    <div id="sidebar">
+        <h2>特訓進度</h2>
+        <div>題號：<span id="q-num" class="stat-val">1</span> / 60</div>
+        <div>準確度：<span id="acc-val" class="stat-val">0</span>%</div>
+        <hr style="width:100%; border:0; border-top:1px solid #5d6d7e;">
+        <div style="font-size:0.9em;">
+            <p><strong>學生：</strong><span id="disp-name"></span></p>
+            <p id="task-desc">請配對所有貼紙。</p>
+        </div>
+        <div id="btn-area">
+            <button id="check-btn" class="action-btn" onclick="checkAll()">檢查答案</button>
+            <button id="next-btn" class="action-btn hidden" onclick="nextQuestion()">下一題</button>
+        </div>
+    </div>
+    <div id="workspace"></div>
+</div>
+
+<div id="result-screen" class="overlay hidden">
+    <h1 id="result-title">特訓完成！</h1>
+    <div id="result-body" style="font-size:1.2em; line-height:2; margin:20px;"></div>
+    <button onclick="location.reload()" style="padding:15px 30px; background:#27ae60; color:white; border:none; border-radius:8px;">重新挑戰</button>
+</div>
+
+<script>
+    const COLORS = [
+        { name: '紅', hex: '#e74c3c' },
+        { name: '藍', hex: '#3498db' },
+        { name: '綠', hex: '#2ecc71' },
+        { name: '黃', hex: '#f1c40f' },
+        { name: '紫', hex: '#9b59b6' }
+    ];
+    const SIZES = [
+        { name: '小', px: 40 }, // 針對平板調大一點好抓取
+        { name: '中', px: 65 },
+        { name: '大', px: 95 }
+    ];
+
+    let state = {
+        currentQ: 1,
+        totalQ: 60,
+        results: [],
+        targets: [],
+        stickers: [],
+        isLocked: false
+    };
+
+    function startGame() {
+        const name = document.getElementById('name').value;
+        const cls = document.getElementById('class').value;
+        if(!name || !cls) return alert("請填寫資料");
+        document.getElementById('disp-name').innerText = name + " (" + cls + ")";
+        document.getElementById('login-screen').classList.add('hidden');
+        initLevel();
+    }
+
+    function initLevel() {
+        state.isLocked = false;
+        const ws = document.getElementById('workspace');
+        ws.innerHTML = "";
+        state.targets = [];
+        state.stickers = [];
+        document.getElementById('q-num').innerText = state.currentQ;
+        document.getElementById('check-btn').classList.remove('hidden');
+        document.getElementById('next-btn').classList.add('hidden');
+
+        let difficulty = Math.floor((state.currentQ - 1) / 15) + 1;
+        let stickerCount = Math.min(difficulty + Math.floor(Math.random() * 2), 5); 
+
+        for(let i=0; i < stickerCount; i++) {
+            let color = COLORS[Math.floor(Math.random() * COLORS.length)];
+            let size = SIZES[Math.floor(Math.random() * SIZES.length)];
+            
+            let tx = 250 + Math.random() * (ws.offsetWidth - 380);
+            let ty = 50 + Math.random() * (ws.offsetHeight - 180);
+            
+            const targetEl = document.createElement('div');
+            targetEl.className = 'target';
+            targetEl.style.width = size.px + 'px';
+            targetEl.style.height = size.px + 'px';
+            targetEl.style.left = tx + 'px';
+            targetEl.style.top = ty + 'px';
+            targetEl.style.borderColor = color.hex;
+            targetEl.style.color = color.hex;
+            ws.appendChild(targetEl);
+
+            let sx = 20 + Math.random() * 80;
+            let sy = 50 + (i * 110);
+
+            const stickerEl = document.createElement('div');
+            stickerEl.className = 'sticker';
+            stickerEl.style.width = (size.px - 4) + 'px';
+            stickerEl.style.height = (size.px - 4) + 'px';
+            stickerEl.style.left = sx + 'px';
+            stickerEl.style.top = sy + 'px';
+            stickerEl.style.background = color.hex;
+            stickerEl.innerText = size.name;
+            ws.appendChild(stickerEl);
+
+            state.targets.push({ x: tx, y: ty, size: size.px, color: color.hex, matched: false });
+            state.stickers.push({ el: stickerEl, size: size.px, color: color.hex });
+            
+            makeDraggable(stickerEl);
+        }
+
+        if(state.currentQ > 20) {
+            for(let j=0; j<15; j++) {
+                const n = document.createElement('div');
+                n.className = 'noise';
+                n.style.left = Math.random()*100 + "%";
+                n.style.top = Math.random()*100 + "%";
+                n.style.fontSize = (Math.random()*40 + 10) + "px";
+                n.innerText = "●";
+                ws.appendChild(n);
+            }
+        }
+    }
+
+    // 通用的拖拽處理函數 (支援觸控與滑鼠)
+    function makeDraggable(elm) {
+        let p1 = 0, p2 = 0, p3 = 0, p4 = 0;
+
+        // 監聽觸控與滑鼠按下
+        elm.addEventListener('mousedown', dragStart);
+        elm.addEventListener('touchstart', dragStart, { passive: false });
+
+        function dragStart(e) {
+            if(state.isLocked) return;
+            // 防止滑動頁面
+            if (e.type === 'touchstart') {
+                p3 = e.touches[0].clientX;
+                p4 = e.touches[0].clientY;
+            } else {
+                p3 = e.clientX;
+                p4 = e.clientY;
+            }
+
+            elm.classList.add('dragging');
+
+            document.addEventListener('mousemove', dragMove);
+            document.addEventListener('touchmove', dragMove, { passive: false });
+            document.addEventListener('mouseup', dragEnd);
+            document.addEventListener('touchend', dragEnd);
+        }
+
+        function dragMove(e) {
+            e.preventDefault(); // 核心：阻止 iPad 的頁面捲動
+
+            let clientX, clientY;
+            if (e.type === 'touchmove') {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+
+            p1 = p3 - clientX;
+            p2 = p4 - clientY;
+            p3 = clientX;
+            p4 = clientY;
+
+            elm.style.top = (elm.offsetTop - p2) + "px";
+            elm.style.left = (elm.offsetLeft - p1) + "px";
+        }
+
+        function dragEnd() {
+            elm.classList.remove('dragging');
+            document.removeEventListener('mousemove', dragMove);
+            document.removeEventListener('touchmove', dragMove);
+            document.removeEventListener('mouseup', dragEnd);
+            document.removeEventListener('touchend', dragEnd);
+        }
+    }
+
+    function checkAll() {
+        state.isLocked = true;
+        let totalStickers = state.stickers.length;
+        let correctCount = 0;
+
+        state.stickers.forEach(s => {
+            let sRect = s.el.getBoundingClientRect();
+            let wsRect = document.getElementById('workspace').getBoundingClientRect();
+            let sx = sRect.left + sRect.width/2 - wsRect.left;
+            let sy = sRect.top + sRect.height/2 - wsRect.top;
+
+            state.targets.forEach(t => {
+                let tx = t.x + t.size/2;
+                let ty = t.y + t.size/2;
+                let dist = Math.sqrt(Math.pow(sx-tx, 2) + Math.pow(sy-ty, 2));
+
+                if(dist < 30 && s.color === t.color && s.size === t.size) {
+                    correctCount++;
+                }
+            });
+        });
+
+        let finalScore = (correctCount / totalStickers) * 100;
+        state.results.push(finalScore);
+        
+        let avgAcc = state.results.reduce((a,b)=>a+b, 0) / state.results.length;
+        document.getElementById('acc-val').innerText = Math.round(avgAcc);
+
+        document.getElementById('task-desc').innerHTML = `<span style="color:${finalScore === 100 ? '#27ae60' : '#e74c3c'}">
+            本題結果：${correctCount} / ${totalStickers} 正確</span>`;
+        
+        document.getElementById('check-btn').classList.add('hidden');
+        document.getElementById('next-btn').classList.remove('hidden');
+    }
+
+    function nextQuestion() {
+        if(state.currentQ < state.totalQ) {
+            state.currentQ++;
+            initLevel();
+        } else {
+            finishGame();
+        }
+    }
+
+    function finishGame() {
+        document.getElementById('result-screen').classList.remove('hidden');
+        let avg = state.results.reduce((a,b)=>a+b, 0) / state.totalQ;
+        document.getElementById('result-body').innerHTML = `
+            平均精準配對率：<strong>${Math.round(avg)}%</strong><br>
+            觀察力評級：${avg > 90 ? "頂級觀察員" : avg > 70 ? "優秀" : "需加強專注力"}<br>
+            恭喜完成 60 題全方位特訓！
+        `;
+    }
+</script>
+</body>
+</html>

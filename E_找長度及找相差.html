@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>數學實踐課：長度量度考核系統</title>
+    <style>
+        :root { --cm-unit: 40px; --primary: #2196F3; }
+        body { font-family: 'Microsoft JhengHei', sans-serif; text-align: center; background: #f0f2f5; margin: 0; overflow: hidden; }
+        
+        /* 頁面切換 */
+        .page { display: none; width: 100vw; height: 100vh; flex-direction: column; }
+        .active { display: flex; }
+
+        /* 登錄頁面 */
+        #login-page { justify-content: center; align-items: center; background: white; }
+        .login-box { padding: 40px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border-top: 8px solid var(--primary); }
+        .login-box input { width: 250px; padding: 12px; margin: 10px; font-size: 18px; border: 2px solid #ddd; border-radius: 8px; text-align: center; }
+
+        /* 練習區 */
+        #header { background: #333; color: white; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; }
+        #workspace { width: 100vw; height: 55vh; background: white; position: relative; border-bottom: 3px solid #444; touch-action: none; overflow: hidden; }
+        
+        /* Ruler & Lines */
+        #ruler { position: absolute; bottom: 0; left: 0; width: 100%; height: 80px; background: #ffeb3b; border-top: 2px solid #333; }
+        .cm-mark { position: absolute; border-left: 2px solid #333; height: 35px; display: flex; flex-direction: column; align-items: center; }
+        .cm-label { margin-top: 40px; font-size: 16px; font-weight: bold; }
+        #start-line { position: absolute; left: 80px; top: 0; bottom: 0; width: 4px; background: #e91e63; z-index: 5; pointer-events: none; }
+        .line-label { position: absolute; left: 55px; top: 10px; color: #e91e63; font-weight: bold; background: white; padding: 2px 8px; border: 2px solid #e91e63; border-radius: 4px; z-index: 6; font-size: 14px; }
+
+        /* 物件 */
+        .draggable { position: absolute; cursor: move; display: flex; align-items: center; border-radius: 8px; border: 2px solid #333; box-shadow: 3px 3px 6px rgba(0,0,0,0.15); }
+        .object-tag { position: absolute; left: -45px; background: #333; color: white; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+        .object-icon { font-size: 35px; margin: 0 10px; pointer-events: none; }
+
+        /* 面板 */
+        #assessment-panel { flex-grow: 1; padding: 20px; background: #f1f1f1; display: flex; flex-direction: column; align-items: center; gap: 15px; }
+        .input-row { display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; }
+        .input-group { background: white; padding: 10px 15px; border-radius: 8px; border: 1px solid #ddd; display: flex; align-items: center; gap: 8px; font-size: 16px; }
+        .input-group input { width: 60px; padding: 8px; font-size: 18px; text-align: center; border: 2px solid #aaa; border-radius: 4px; }
+        
+        #feedback { font-size: 20px; font-weight: bold; height: 30px; color: #444; }
+        .btn { padding: 12px 30px; font-size: 18px; cursor: pointer; border: none; border-radius: 8px; color: white; font-weight: bold; transition: 0.3s; }
+        .btn-check { background: var(--primary); }
+        .btn-next { background: #4caf50; }
+        .btn-start { background: var(--primary); margin-top: 20px; }
+        .hidden { display: none !important; }
+
+        /* 報告頁面 */
+        #report-page { justify-content: center; align-items: center; background: #fff; }
+        .report-card { width: 400px; padding: 30px; border: 2px solid #ddd; border-radius: 15px; text-align: left; line-height: 1.8; }
+    </style>
+</head>
+<body>
+
+    <div id="login-page" class="page active">
+        <div class="login-box">
+            <h1>量度與比較實踐課</h1>
+            <p>請輸入資料以開始考核</p>
+            <input type="text" id="stu-name" placeholder="學生姓名"><br>
+            <input type="text" id="stu-class" placeholder="班別 (如 2A)"><br>
+            <button class="btn btn-start" onclick="startTask()">開始考核</button>
+        </div>
+    </div>
+
+    <div id="exercise-page" class="page">
+        <div id="header">
+            <span id="header-user">姓名：-- | 班別：--</span>
+            <span>任務進度：<span id="progress-val">1</span> / 60</span>
+        </div>
+
+        <div id="workspace">
+            <div id="start-line"></div>
+            <div class="line-label">對齊 0 cm</div>
+            <div id="ruler"></div>
+        </div>
+
+        <div id="assessment-panel">
+            <div id="feedback">請對齊 0 cm 紅線後量度。</div>
+            
+            <div class="input-row">
+                <div class="input-group">
+                    <span id="labelA">物件 A</span>: <input type="number" id="inputA"> cm
+                </div>
+                <div class="input-group">
+                    <span id="labelB">物件 B</span>: <input type="number" id="inputB"> cm
+                </div>
+                <div class="input-group" style="background: #e3f2fd;">
+                    <span>相差 (大減小):</span> <input type="number" id="inputDiff"> cm
+                </div>
+            </div>
+
+            <div>
+                <button id="check-btn" class="btn btn-check" onclick="verify()">檢查答案</button>
+                <button id="next-btn" class="btn btn-next hidden" onclick="nextRound()">進入下一題</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="report-page" class="page">
+        <div class="report-card">
+            <h2 style="text-align:center; color:#4caf50;">實踐課考核報告</h2>
+            <hr>
+            <p><strong>學生姓名：</strong><span id="rep-name"></span></p>
+            <p><strong>班別：</strong><span id="rep-class"></span></p>
+            <p><strong>完成任務：</strong>60 / 60 題</p>
+            <p><strong>總錯誤次數：</strong><span id="rep-err" style="color:red"></span> 次</p>
+            <p><strong>總用時：</strong><span id="rep-time"></span></p>
+            <hr>
+            <p style="text-align:center; font-size: 0.9em; color:#666;">請截圖此報告交給老師。</p>
+            <button class="btn btn-check" style="width:100%" onclick="location.reload()">重新開始</button>
+        </div>
+    </div>
+
+    <script>
+        const CM_PX = 40; const START_X = 80;
+        let session = {
+            name: "", class: "", current: 1, total: 60,
+            errors: 0, startTime: null, objA: null, objB: null
+        };
+
+        const objectLibrary = [
+            { name: '鉛筆', icon: '✏️', color: '#ffecb3' }, { name: '原子筆', icon: '🖊️', color: '#bbdefb' },
+            { name: '毛筆', icon: '🖌️', color: '#dcedc8' }, { name: '蠟筆', icon: '🖍️', color: '#ffcdd2' },
+            { name: '螺絲批', icon: '🪛', color: '#cfd8dc' }, { name: '牙刷', icon: '🪥', color: '#b2ebf2' },
+            { name: '間尺', icon: '📏', color: '#f8bbd0' }, { name: '巧克力', icon: '🍫', color: '#d7ccc8' }
+        ];
+
+        // 初始化刻度
+        const ruler = document.getElementById('ruler');
+        for (let i = 0; i <= 30; i++) {
+            let mark = document.createElement('div');
+            mark.className = 'cm-mark';
+            mark.style.left = (START_X + i * CM_PX) + 'px';
+            mark.innerHTML = `<span class="cm-label">${i}</span>`;
+            ruler.appendChild(mark);
+        }
+
+        function startTask() {
+            session.name = document.getElementById('stu-name').value;
+            session.class = document.getElementById('stu-class').value;
+            if(!session.name || !session.class) return alert("請輸入完整資料！");
+            
+            document.getElementById('header-user').innerText = `姓名：${session.name} | 班別：${session.class}`;
+            session.startTime = new Date();
+            
+            showPage('exercise-page');
+            loadRound();
+        }
+
+        function showPage(id) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+
+        function loadRound() {
+            const ws = document.getElementById('workspace');
+            ws.querySelectorAll('.draggable').forEach(e => e.remove());
+            document.querySelectorAll('input').forEach(i => { if(i.id.includes('input')) i.value = ''; i.disabled = false; });
+            document.getElementById('progress-val').innerText = session.current;
+            document.getElementById('feedback').innerText = "請將物件左端對齊紅線。";
+            document.getElementById('feedback').style.color = "#444";
+            document.getElementById('check-btn').classList.remove('hidden');
+            document.getElementById('next-btn').classList.add('hidden');
+
+            session.objA = spawnObj('A', 60);
+            session.objB = spawnObj('B', 160);
+            if(session.objA.length === session.objB.length) loadRound();
+        }
+
+        function spawnObj(id, top) {
+            const data = objectLibrary[Math.floor(Math.random() * objectLibrary.length)];
+            const len = Math.floor(Math.random() * 15) + 4;
+            const el = document.createElement('div');
+            el.className = 'draggable';
+            el.style.width = (len * CM_PX) + 'px';
+            el.style.height = '60px';
+            el.style.left = (Math.random() * 200 + 200) + 'px';
+            el.style.top = top + 'px';
+            el.style.backgroundColor = data.color;
+            el.innerHTML = `<div class="object-tag">${id}</div><span class="object-icon">${data.icon}</span>`;
+            
+            setupDrag(el);
+            document.getElementById('workspace').appendChild(el);
+            document.getElementById('label' + id).innerText = `${id} (${data.name})`;
+            return { length: len, element: el, name: data.name };
+        }
+
+        function setupDrag(el) {
+            let p1=0, p2=0, p3=0, p4=0;
+            el.onmousedown = el.ontouchstart = (e) => {
+                const event = e.type.includes('touch') ? e.touches[0] : e;
+                p3 = event.clientX; p4 = event.clientY;
+                document.onmouseup = document.ontouchend = () => { document.onmousemove = document.ontouchmove = null; };
+                document.onmousemove = document.ontouchmove = (me) => {
+                    const mv = me.type.includes('touch') ? me.touches[0] : me;
+                    p1 = p3 - mv.clientX; p2 = p4 - mv.clientY;
+                    p3 = mv.clientX; p4 = mv.clientY;
+                    el.style.top = (el.offsetTop - p2) + "px";
+                    el.style.left = (el.offsetLeft - p1) + "px";
+                    if (Math.abs(el.offsetLeft - START_X) < 12) el.style.left = START_X + "px";
+                };
+            };
+        }
+
+        function verify() {
+            const inA = parseInt(document.getElementById('inputA').value);
+            const inB = parseInt(document.getElementById('inputB').value);
+            const inD = parseInt(document.getElementById('inputDiff').value);
+            const f = document.getElementById('feedback');
+
+            const isAAligned = Math.abs(session.objA.element.offsetLeft - START_X) < 2;
+            const isBAligned = Math.abs(session.objB.element.offsetLeft - START_X) < 2;
+
+            if(!isAAligned || !isBAligned) {
+                f.innerText = "⚠️ 請先將物件完全對齊 0 cm 紅線！";
+                f.style.color = "#ff9800";
+                return;
+            }
+
+            const trueDiff = Math.abs(session.objA.length - session.objB.length);
+            if(inA === session.objA.length && inB === session.objB.length && inD === trueDiff) {
+                f.innerText = "✅ 正確！可以進入下一題。";
+                f.style.color = "#4caf50";
+                document.getElementById('check-btn').classList.add('hidden');
+                document.getElementById('next-btn').classList.remove('hidden');
+                document.querySelectorAll('input').forEach(i => { if(i.id.includes('input')) i.disabled = true; });
+            } else {
+                f.innerText = "❌ 數值或相差錯誤，請重新量度。";
+                f.style.color = "#f44336";
+                session.errors++;
+            }
+        }
+
+        function nextRound() {
+            if(session.current < session.total) {
+                session.current++;
+                loadRound();
+            } else {
+                finish();
+            }
+        }
+
+        function finish() {
+            showPage('report-page');
+            const end = new Date();
+            const diff = Math.floor((end - session.startTime) / 1000);
+            document.getElementById('rep-name').innerText = session.name;
+            document.getElementById('rep-class').innerText = session.class;
+            document.getElementById('rep-err').innerText = session.errors;
+            document.getElementById('rep-time').innerText = `${Math.floor(diff/60)} 分 ${diff%60} 秒`;
+        }
+    </script>
+</body>
+</html>

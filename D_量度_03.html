@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>職場實務練習 - 電子秤讀數</title>
+    <style>
+        body { font-family: "PingFang TC", sans-serif; background-color: #f4f7f6; padding: 15px; text-align: center; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border-top: 8px solid #2c3e50; }
+        h2 { color: #2c3e50; }
+        
+        /* 電子秤顯示屏視覺 */
+        .scale-display {
+            background-color: #222;
+            color: #00ff41; /* 經典數位螢幕綠色 */
+            font-family: 'Courier New', Courier, monospace;
+            padding: 30px;
+            border-radius: 10px;
+            margin: 30px 0;
+            border: 5px solid #bdc3c7;
+            box-shadow: inset 0 0 10px #000;
+        }
+        .weight-value { font-size: 4em; font-weight: bold; }
+        .unit { font-size: 1.5em; margin-left: 10px; }
+
+        .input-group { margin-bottom: 15px; text-align: left; }
+        label { font-weight: bold; display: block; margin-bottom: 5px; }
+        input[type="text"], input[type="number"] { width: 100%; padding: 15px; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 20px; text-align: center; }
+        
+        button { width: 100%; padding: 15px; background: #2c3e50; color: white; border: none; border-radius: 10px; font-size: 1.2em; cursor: pointer; margin-top: 10px; font-weight: bold; }
+        button:active { background: #1a252f; }
+        
+        .progress { color: #7f8c8d; font-weight: bold; margin-bottom: 10px; }
+        #report { white-space: pre-wrap; text-align: left; background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 10px; }
+        .hidden { display: none; }
+        .teacher-box { background-color: #e67e22; color: white; padding: 15px; border-radius: 10px; margin-top: 20px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="login-screen">
+        <h2>電子秤讀數辨識練習</h2>
+        <p>請輸入資料以開始 60 題練習：</p>
+        <div class="input-group">
+            <label>學生姓名：</label>
+            <input type="text" id="studentName" placeholder="請輸入姓名">
+        </div>
+        <div class="input-group">
+            <label>班別：</label>
+            <input type="text" id="studentClass" placeholder="請輸入班別">
+        </div>
+        <button onclick="startApp()">開始練習</button>
+    </div>
+
+    <div id="task-screen" class="hidden">
+        <div class="progress" id="progress-text">進度：1 / 60</div>
+        <p style="font-size: 1.1em;">請讀取顯示屏上的重量，並輸入正確數字：</p>
+        
+        <div class="scale-display">
+            <span id="display-value" class="weight-value">0.00</span>
+            <span class="unit">g</span>
+        </div>
+
+        <input type="number" id="answerInput" step="0.01" placeholder="在此輸入讀數" autofocus>
+        <button onclick="checkAnswer()">確認答案</button>
+    </div>
+
+    <div id="report-screen" class="hidden">
+        <h2>練習完成</h2>
+        <div id="report"></div>
+        <div class="teacher-box">
+            ⚠️ 練習已結束。請舉手通知老師前來記錄成績。
+        </div>
+        <button onclick="location.reload()" style="background:#95a5a6;">重新開始</button>
+    </div>
+</div>
+
+<script>
+    let currentTask = 0;
+    let score = 0;
+    const totalTasks = 60;
+    let currentWeightStr = "";
+    let studentInfo = { name: "", class: "" };
+
+    function startApp() {
+        studentInfo.name = document.getElementById('studentName').value;
+        studentInfo.class = document.getElementById('studentClass').value;
+        if (!studentInfo.name || !studentInfo.class) {
+            alert("請填寫姓名和班別"); return;
+        }
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('task-screen').classList.remove('hidden');
+        loadTask();
+    }
+
+    function loadTask() {
+        if (currentTask >= totalTasks) {
+            showReport();
+            return;
+        }
+
+        document.getElementById('progress-text').innerText = `題目：${currentTask + 1} / ${totalTasks}`;
+        document.getElementById('answerInput').value = '';
+        document.getElementById('answerInput').focus();
+
+        // 隨機決定難度：0=整數, 1=一位小數, 2=兩位小數
+        const difficulty = Math.floor(Math.random() * 3);
+        let rawWeight = Math.random() * 500; // 0-500g 之間
+
+        if (difficulty === 0) {
+            currentWeightStr = Math.floor(rawWeight).toString();
+        } else if (difficulty === 1) {
+            currentWeightStr = rawWeight.toFixed(1);
+        } else {
+            currentWeightStr = rawWeight.toFixed(2);
+        }
+
+        document.getElementById('display-value').innerText = currentWeightStr;
+    }
+
+    function checkAnswer() {
+        const studentInput = document.getElementById('answerInput').value;
+        if (studentInput === "") {
+            alert("請輸入數字"); return;
+        }
+
+        // 將輸入轉為浮點數比較，確保 12.50 與 12.5 被視為相同（除非有特殊格式要求）
+        // 如果要求必須「完全一樣的字串」，則改用字串比較
+        if (parseFloat(studentInput) === parseFloat(currentWeightStr)) {
+            score++;
+        }
+
+        currentTask++;
+        loadTask();
+    }
+
+    function showReport() {
+        document.getElementById('task-screen').classList.add('hidden');
+        document.getElementById('report-screen').classList.remove('hidden');
+        
+        const now = new Date().toLocaleString('zh-HK');
+        document.getElementById('report').innerText = `
+【 電子秤讀數辨識成績單 】
+---------------------------------
+完成時間：${now}
+學生姓名：${studentInfo.name}
+班別：${studentInfo.class}
+---------------------------------
+練習項目：精確稱重 (0.01g)
+總題數：${totalTasks} 題
+答對題數：${score} 題
+正確率：${Math.round((score/totalTasks)*100)} %
+---------------------------------
+狀態：已完成練習
+        `;
+    }
+
+    // 支援按 Enter 鍵
+    document.getElementById('answerInput').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') checkAnswer();
+    });
+</script>
+
+</body>
+</html>

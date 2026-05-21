@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>實踐課：量度與排序考核系統</title>
+    <style>
+        :root { --cm-unit: 40px; --primary: #2196F3; --success: #4CAF50; }
+        body { font-family: 'Microsoft JhengHei', sans-serif; text-align: center; background: #f0f2f5; margin: 0; overflow: hidden; }
+        
+        .page { display: none; width: 100vw; height: 100vh; flex-direction: column; }
+        .active { display: flex; }
+
+        /* 登錄頁面 */
+        #login-page { justify-content: center; align-items: center; background: white; }
+        .login-box { padding: 40px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border-top: 8px solid var(--primary); }
+        .login-box input { width: 250px; padding: 12px; margin: 10px; font-size: 18px; border: 2px solid #ddd; border-radius: 8px; text-align: center; }
+
+        /* 頂部欄 */
+        #header { background: #333; color: white; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; }
+
+        /* 工作區 */
+        #workspace { width: 100vw; height: 50vh; background: white; position: relative; border-bottom: 3px solid #333; overflow: hidden; }
+        
+        /* 間尺樣式 */
+        #ruler-container { 
+            position: absolute; width: 840px; height: 100px; 
+            z-index: 100; cursor: move; touch-action: none;
+            filter: drop-shadow(0 5px 15px rgba(0,0,0,0.3));
+        }
+        #ruler-body { width: 100%; height: 70px; background: #ffeb3b; border: 2px solid #555; position: relative; }
+        .cm-mark { position: absolute; border-left: 2px solid #333; height: 30px; display: flex; flex-direction: column; align-items: center; }
+        .cm-label { margin-top: 35px; font-size: 16px; font-weight: bold; }
+        .ruler-handle { position: absolute; top: -25px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 2px 15px; border-radius: 10px; font-size: 14px; white-space: nowrap; }
+
+        /* 固定物件 */
+        .fixed-object { position: absolute; display: flex; align-items: center; border-radius: 5px; border: 2px solid #444; pointer-events: none; }
+        .obj-tag { position: absolute; left: -45px; font-weight: bold; font-size: 20px; color: #d32f2f; }
+        .obj-icon { font-size: 35px; margin: 0 10px; }
+
+        /* 控制面板 */
+        #panel { flex-grow: 1; padding: 15px; background: #fff; border-top: 2px solid #ddd; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .input-row { display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; }
+        .input-box { background: #f1f3f4; padding: 8px 12px; border-radius: 8px; font-weight: bold; display: flex; align-items: center; gap: 5px; }
+        input[type="number"] { width: 55px; padding: 5px; font-size: 18px; text-align: center; border: 1px solid #ccc; border-radius: 4px; }
+        select { padding: 5px; font-size: 18px; border: 1px solid var(--primary); border-radius: 4px; }
+        
+        #feedback { font-size: 20px; font-weight: bold; min-height: 28px; }
+        .btn { padding: 12px 30px; font-size: 18px; cursor: pointer; border: none; border-radius: 8px; color: white; font-weight: bold; }
+        .hidden { display: none !important; }
+
+        /* 報告頁面 */
+        #report-page { justify-content: center; align-items: center; background: #fff; }
+        .report-card { width: 420px; padding: 30px; border: 2px solid #ddd; border-radius: 15px; text-align: left; line-height: 1.8; box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
+    </style>
+</head>
+<body>
+
+    <div id="login-page" class="page active">
+        <div class="login-box">
+            <h1 style="color:var(--primary)">量度與排序實踐考核</h1>
+            <p>請輸入個人資料以開始 60 題考核</p>
+            <input type="text" id="stu-name" placeholder="學生姓名"><br>
+            <input type="text" id="stu-class" placeholder="班別 (如 1B)"><br>
+            <button class="btn" style="background:var(--primary); margin-top:20px;" onclick="startAssessment()">開始考核</button>
+        </div>
+    </div>
+
+    <div id="exercise-page" class="page">
+        <div id="header">
+            <span id="user-info">學生：-- | 班別：--</span>
+            <span>進度：<span id="prog-val">1</span> / 60</span>
+        </div>
+
+        <div id="workspace">
+            <div id="ruler-container" style="left: 100px; top: 300px;">
+                <div class="ruler-handle">↔ 拖動間尺進行量度</div>
+                <div id="ruler-body"></div>
+            </div>
+        </div>
+
+        <div id="panel">
+            <div id="feedback">請移動間尺，量度 A, B, C 物件。</div>
+            
+            <div class="input-row">
+                <div class="input-box">物件 A: <input type="number" id="valA"> cm</div>
+                <div class="input-box">物件 B: <input type="number" id="valB"> cm</div>
+                <div class="input-box">物件 C: <input type="number" id="valC"> cm</div>
+            </div>
+
+            <div class="input-row">
+                <div class="input-box" style="background: #e3f2fd; border: 1px solid var(--primary);">
+                    按長度排序 (最短 → 最長): 
+                    <select id="sort1"><option value="">?</option><option value="A">A</option><option value="B">B</option><option value="C">C</option></select> →
+                    <select id="sort2"><option value="">?</option><option value="A">A</option><option value="B">B</option><option value="C">C</option></select> →
+                    <select id="sort3"><option value="">?</option><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
+                </div>
+            </div>
+
+            <div class="input-row" style="margin-top:5px;">
+                <button id="check-btn" class="btn" style="background: var(--primary);" onclick="verify()">檢查答案</button>
+                <button id="next-btn" class="btn hidden" style="background: var(--success);" onclick="nextTask()">進入下一題</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="report-page" class="page">
+        <div class="report-card">
+            <h2 style="text-align:center; color:var(--success);">實踐課考核完成報告</h2>
+            <hr>
+            <p><strong>學生姓名：</strong><span id="rep-name"></span></p>
+            <p><strong>所屬班別：</strong><span id="rep-class"></span></p>
+            <p><strong>完成題目：</strong>60 / 60 題</p>
+            <p><strong>錯誤次數：</strong><span id="rep-err" style="color:red"></span> 次</p>
+            <p><strong>完成用時：</strong><span id="rep-time"></span></p>
+            <hr>
+            <p style="text-align:center; font-size: 0.9em; color:#666;">請截圖並提交給老師記錄。</p>
+            <button class="btn" style="background:var(--primary); width:100%" onclick="location.reload()">重新開始</button>
+        </div>
+    </div>
+
+    <script>
+        const CM_PX = 40;
+        let session = {
+            name: "", class: "", current: 1, total: 60,
+            errors: 0, startTime: null, correctData: {}
+        };
+
+        const items = [
+            { n: '蠟筆', i: '🖍️', c: '#ffcdd2' }, { n: '鉛筆', i: '✏️', c: '#fff9c4' },
+            { n: '原子筆', i: '🖊️', c: '#e3f2fd' }, { n: '美工刀', i: '🔪', c: '#f5f5f5' },
+            { n: '牙刷', i: '🪥', c: '#e0f2f1' }
+        ];
+
+        // 1. 初始化間尺刻度
+        const rulerBody = document.getElementById('ruler-body');
+        for (let i = 0; i <= 20; i++) {
+            let mark = document.createElement('div');
+            mark.className = 'cm-mark';
+            mark.style.left = (i * CM_PX) + 'px';
+            mark.innerHTML = `<span class="cm-label">${i}</span>`;
+            rulerBody.appendChild(mark);
+        }
+
+        // 2. 登錄與開始
+        function startAssessment() {
+            session.name = document.getElementById('stu-name').value;
+            session.class = document.getElementById('stu-class').value;
+            if(!session.name || !session.class) return alert("請輸入完整資料");
+
+            document.getElementById('user-info').innerText = `學生：${session.name} | 班別：${session.class}`;
+            session.startTime = new Date();
+            showPage('exercise-page');
+            initRound();
+        }
+
+        function showPage(id) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+
+        // 3. 題目生成邏輯
+        function initRound() {
+            const ws = document.getElementById('workspace');
+            ws.querySelectorAll('.fixed-object').forEach(e => e.remove());
+            document.querySelectorAll('input[type="number"]').forEach(i => { i.value = ''; i.disabled = false; });
+            document.querySelectorAll('select').forEach(s => { s.value = ''; s.disabled = false; });
+            
+            document.getElementById('prog-val').innerText = session.current;
+            document.getElementById('feedback').innerText = "請移動間尺，量度 A, B, C 的長度。";
+            document.getElementById('feedback').style.color = "#333";
+            document.getElementById('check-btn').classList.remove('hidden');
+            document.getElementById('next-btn').classList.add('hidden');
+
+            let lengths = [];
+            while(lengths.length < 3) {
+                let l = Math.floor(Math.random() * 11) + 4; // 4 to 14cm
+                if(!lengths.includes(l)) lengths.push(l);
+            }
+
+            const ids = ['A', 'B', 'C'];
+            session.correctData = {};
+            ids.forEach((id, idx) => {
+                const data = items[Math.floor(Math.random() * items.length)];
+                const obj = document.createElement('div');
+                obj.className = 'fixed-object';
+                obj.style.width = (lengths[idx] * CM_PX) + 'px';
+                obj.style.height = '50px';
+                obj.style.left = (Math.random() * 150 + 50) + 'px';
+                obj.style.top = (40 + idx * 85) + 'px';
+                obj.style.backgroundColor = data.c;
+                obj.innerHTML = `<div class="obj-tag">${id}</div><span class="obj-icon">${data.i}</span>`;
+                ws.appendChild(obj);
+                session.correctData[id] = lengths[idx];
+            });
+        }
+
+        // 4. 間尺拖動 (支援滑鼠與觸控)
+        const ruler = document.getElementById('ruler-container');
+        let p1=0, p2=0, p3=0, p4=0;
+        ruler.onmousedown = ruler.ontouchstart = (e) => {
+            const ev = e.type.includes('touch') ? e.touches[0] : e;
+            p3 = ev.clientX; p4 = ev.clientY;
+            document.onmouseup = document.ontouchend = () => { document.onmousemove = document.ontouchmove = null; };
+            document.onmousemove = document.ontouchmove = (me) => {
+                const mv = me.type.includes('touch') ? me.touches[0] : me;
+                p1 = p3 - mv.clientX; p2 = p4 - mv.clientY;
+                p3 = mv.clientX; p4 = mv.clientY;
+                ruler.style.top = (ruler.offsetTop - p2) + "px";
+                ruler.style.left = (ruler.offsetLeft - p1) + "px";
+            };
+        };
+
+        // 5. 答案驗證
+        function verify() {
+            const vA = parseInt(document.getElementById('valA').value);
+            const vB = parseInt(document.getElementById('valB').value);
+            const vC = parseInt(document.getElementById('valC').value);
+            const s = [document.getElementById('sort1').value, document.getElementById('sort2').value, document.getElementById('sort3').value];
+            const f = document.getElementById('feedback');
+
+            // 檢查是否填完
+            if (isNaN(vA) || isNaN(vB) || isNaN(vC) || s.some(v => v === "")) {
+                f.innerText = "⚠️ 請完成所有量度與排序！";
+                f.style.color = "orange";
+                return;
+            }
+
+            // 1. 檢查量度
+            if (vA !== session.correctData.A || vB !== session.correctData.B || vC !== session.correctData.C) {
+                f.innerText = "❌ 長度量度有誤，請再對準 0 刻度。";
+                f.style.color = "red";
+                session.errors++;
+                return;
+            }
+
+            // 2. 檢查排序
+            const isCorrectOrder = session.correctData[s[0]] < session.correctData[s[1]] && 
+                                   session.correctData[s[1]] < session.correctData[s[2]];
+
+            if (isCorrectOrder) {
+                f.innerText = "✅ 完全正確！請按下一步。";
+                f.style.color = "green";
+                document.getElementById('check-btn').classList.add('hidden');
+                document.getElementById('next-btn').classList.remove('hidden');
+                document.querySelectorAll('input[type="number"], select').forEach(el => el.disabled = true);
+            } else {
+                f.innerText = "❌ 排序順序錯誤 (需從小到大)。";
+                f.style.color = "red";
+                session.errors++;
+            }
+        }
+
+        function nextTask() {
+            if (session.current < session.total) {
+                session.current++;
+                initRound();
+            } else {
+                showReport();
+            }
+        }
+
+        function showReport() {
+            showPage('report-page');
+            const end = new Date();
+            const sec = Math.floor((end - session.startTime) / 1000);
+            document.getElementById('rep-name').innerText = session.name;
+            document.getElementById('rep-class').innerText = session.class;
+            document.getElementById('rep-err').innerText = session.errors;
+            document.getElementById('rep-time').innerText = `${Math.floor(sec/60)}分${sec%60}秒`;
+        }
+    </script>
+</body>
+</html>

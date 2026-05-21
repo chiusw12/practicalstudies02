@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>職場實務練習 - 數字核對</title>
+    <style>
+        body { font-family: "PingFang TC", sans-serif; background-color: #eef2f3; padding: 15px; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+        h2 { color: #2c3e50; text-align: center; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        .input-group { margin-bottom: 15px; }
+        input[type="text"] { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+        
+        .task-box { border: 3px solid #3498db; padding: 20px; border-radius: 15px; margin-bottom: 20px; background-color: #f7fbff; text-align: center; }
+        .target-num { font-family: 'Courier New', monospace; font-size: 2.8em; font-weight: bold; color: #e67e22; letter-spacing: 3px; }
+        
+        .option-btn { width: 100%; padding: 18px; background-color: #ffffff; color: #333; text-align: center; margin-bottom: 10px; border: 2px solid #dee2e6; border-radius: 12px; font-family: monospace; font-size: 1.8em; font-weight: bold; cursor: pointer; }
+        .option-btn:active { background-color: #d1ecf1; }
+        
+        #report { white-space: pre-wrap; background: #f8f9fa; padding: 20px; border: 1px solid #ced4da; font-size: 1.2em; line-height: 1.6; }
+        .hidden { display: none; }
+        .alert-teacher { background-color: #f1c40f; color: #000; padding: 15px; border-radius: 10px; margin-top: 20px; text-align: center; font-weight: bold; border: 2px solid #d4ac0d; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="login-screen">
+        <h2>數字編號比對練習</h2>
+        <div class="input-group">
+            <label>學生姓名：</label>
+            <input type="text" id="studentName" placeholder="輸入姓名">
+        </div>
+        <div class="input-group">
+            <label>班別：</label>
+            <input type="text" id="studentClass" placeholder="輸入班別">
+        </div>
+        <button onclick="startApp()" style="width:100%; padding:15px; background:#3498db; color:white; border:none; border-radius:10px; font-size:1.2em;">開始練習</button>
+    </div>
+
+    <div id="task-screen" class="hidden">
+        <div style="text-align:right; font-weight:bold; color:#95a5a6;" id="progress-text">1 / 60</div>
+        <div class="task-box">
+            <p style="margin:0; font-size:1.2em;">請找出一樣的數字：</p>
+            <div id="target-code" class="target-num"></div>
+        </div>
+        <div id="options-container"></div>
+    </div>
+
+    <div id="report-screen" class="hidden">
+        <h2>練習結果</h2>
+        <div id="report"></div>
+        <div class="alert-teacher">
+            📢 請舉手通知老師前來記錄成績
+        </div>
+        <button onclick="location.reload()" style="width:100%; margin-top:20px; padding:10px; background:#bdc3c7; border:none; border-radius:5px;">重新開始</button>
+    </div>
+</div>
+
+<script>
+    let currentTask = 0;
+    let score = 0;
+    const totalTasks = 60;
+    let studentInfo = { name: "", class: "" };
+
+    // 生成隨機數字編號 (例如: 1234 5678)
+    function generateNumericCode() {
+        let p1 = Math.floor(1000 + Math.random() * 9000);
+        let p2 = Math.floor(1000 + Math.random() * 9000);
+        return `${p1} ${p2}`;
+    }
+
+    // 生成相似但錯誤的數字
+    function generateSimilarNumeric(original) {
+        let parts = original.split(' ');
+        let partIdx = Math.random() > 0.5 ? 0 : 1;
+        let digits = parts[partIdx].split('');
+        let digitIdx = Math.floor(Math.random() * 4);
+        
+        let oldDigit = digits[digitIdx];
+        let newDigit = Math.floor(Math.random() * 10).toString();
+        while(newDigit === oldDigit) {
+            newDigit = Math.floor(Math.random() * 10).toString();
+        }
+        
+        digits[digitIdx] = newDigit;
+        parts[partIdx] = digits.join('');
+        return parts.join(' ');
+    }
+
+    function startApp() {
+        studentInfo.name = document.getElementById('studentName').value;
+        studentInfo.class = document.getElementById('studentClass').value;
+        if (!studentInfo.name || !studentInfo.class) {
+            alert("請先輸入姓名和班別"); return;
+        }
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('task-screen').classList.remove('hidden');
+        loadTask();
+    }
+
+    function loadTask() {
+        if (currentTask >= totalTasks) {
+            showReport();
+            return;
+        }
+
+        document.getElementById('progress-text').innerText = `題目：${currentTask + 1} / ${totalTasks}`;
+        
+        const target = generateNumericCode();
+        document.getElementById('target-code').innerText = target;
+
+        const optionsContainer = document.getElementById('options-container');
+        optionsContainer.innerHTML = '';
+
+        let choices = [{ text: target, correct: true }];
+
+        while(choices.length < 5) {
+            let fake = generateSimilarNumeric(target);
+            if(!choices.find(c => c.text === fake)) {
+                choices.push({ text: fake, correct: false });
+            }
+        }
+
+        choices.sort(() => Math.random() - 0.5);
+
+        choices.forEach(item => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            btn.innerText = item.text;
+            btn.onclick = () => {
+                if (item.correct) score++;
+                currentTask++;
+                loadTask();
+            };
+            optionsContainer.appendChild(btn);
+        });
+    }
+
+    function showReport() {
+        document.getElementById('task-screen').classList.add('hidden');
+        document.getElementById('report-screen').classList.remove('hidden');
+        
+        document.getElementById('report').innerText = `
+姓名：${studentInfo.name}
+班別：${studentInfo.class}
+--------------------------
+練習：數字精確核對
+總題數：${totalTasks}
+答對：${score} 題
+得分：${Math.round((score/totalTasks)*100)} 分
+--------------------------
+        `;
+    }
+</script>
+
+</body>
+</html>

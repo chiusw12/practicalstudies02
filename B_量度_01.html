@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>職場實務練習 - 尺碼量度</title>
+    <style>
+        body { font-family: "PingFang TC", sans-serif; background-color: #fdfdfd; padding: 15px; text-align: center; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border-top: 8px solid #2ecc71; }
+        h2 { color: #27ae60; }
+        .input-group { margin-bottom: 15px; text-align: left; }
+        input[type="text"], input[type="number"] { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 18px; text-align: center; }
+        
+        /* 尺子視覺設計 */
+        .ruler-container { position: relative; width: 100%; height: 120px; background: #f9f9f9; border: 2px solid #333; border-radius: 5px; margin: 30px 0; overflow: hidden; }
+        .ruler-mark { position: absolute; bottom: 0; width: 2px; background: #333; }
+        .ruler-label { position: absolute; bottom: 35px; transform: translateX(-50%); font-weight: bold; font-size: 14px; }
+        .pointer { position: absolute; top: 0; width: 4px; height: 100%; background: #e74c3c; z-index: 10; transition: left 0.3s; }
+        .pointer-head { position: absolute; top: -10px; left: -8px; width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-top: 15px solid #e74c3c; }
+
+        button { width: 100%; padding: 15px; background: #2ecc71; color: white; border: none; border-radius: 10px; font-size: 1.2em; cursor: pointer; margin-top: 10px; font-weight: bold; }
+        .progress { color: #7f8c8d; font-weight: bold; margin-bottom: 10px; }
+        #report { white-space: pre-wrap; text-align: left; background: #f4f4f4; padding: 20px; border-radius: 10px; font-size: 1.1em; }
+        .hidden { display: none; }
+        .teacher-box { background-color: #e67e22; color: white; padding: 15px; border-radius: 10px; margin-top: 20px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="login-screen">
+        <h2>尺碼量度練習 (公分)</h2>
+        <p>請輸入資料後開始：</p>
+        <div class="input-group">
+            <label>學生姓名：</label>
+            <input type="text" id="studentName">
+        </div>
+        <div class="input-group">
+            <label>班別：</label>
+            <input type="text" id="studentClass">
+        </div>
+        <button onclick="startApp()">開始練習</button>
+    </div>
+
+    <div id="task-screen" class="hidden">
+        <div class="progress" id="progress-text">進度：1 / 60</div>
+        <p style="font-size: 1.2em;">請讀取紅色指標所指的數值 (cm)：</p>
+        
+        <div class="ruler-container" id="ruler">
+            <div id="pointer" class="pointer"><div class="pointer-head"></div></div>
+            </div>
+
+        <input type="number" id="answerInput" placeholder="在此輸入數字" autofocus>
+        <button onclick="checkAnswer()">下一題</button>
+    </div>
+
+    <div id="report-screen" class="hidden">
+        <h2>練習完成報告</h2>
+        <div id="report"></div>
+        <div class="teacher-box">
+            ⚠️ 練習結束。請通知老師來記錄分數。
+        </div>
+        <button onclick="location.reload()" style="background:#95a5a6;">重新開始</button>
+    </div>
+</div>
+
+<script>
+    let currentTask = 0;
+    let score = 0;
+    const totalTasks = 60;
+    let correctAnswer = 0;
+    let studentInfo = { name: "", class: "" };
+
+    // 初始化尺子刻度 (0-20cm)
+    function initRuler() {
+        const ruler = document.getElementById('ruler');
+        for (let i = 0; i <= 20; i++) {
+            const leftPos = (i * 5); // 每 1cm 佔 5% 寬度
+            
+            // 長刻度
+            const mark = document.createElement('div');
+            mark.className = 'ruler-mark';
+            mark.style.left = leftPos + '%';
+            mark.style.height = '30px';
+            ruler.appendChild(mark);
+
+            // 數字標籤
+            const label = document.createElement('div');
+            label.className = 'ruler-label';
+            label.style.left = leftPos + '%';
+            label.innerText = i;
+            ruler.appendChild(label);
+        }
+    }
+
+    function startApp() {
+        studentInfo.name = document.getElementById('studentName').value;
+        studentInfo.class = document.getElementById('studentClass').value;
+        if (!studentInfo.name || !studentInfo.class) {
+            alert("請填寫姓名和班別"); return;
+        }
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('task-screen').classList.remove('hidden');
+        initRuler();
+        loadTask();
+    }
+
+    function loadTask() {
+        if (currentTask >= totalTasks) {
+            showReport();
+            return;
+        }
+
+        document.getElementById('progress-text').innerText = `題目：${currentTask + 1} / ${totalTasks}`;
+        document.getElementById('answerInput').value = '';
+        document.getElementById('answerInput').focus();
+
+        // 隨機生成 1 到 20 之間的整數
+        correctAnswer = Math.floor(Math.random() * 20) + 1;
+        
+        // 移動指標
+        const pointer = document.getElementById('pointer');
+        pointer.style.left = (correctAnswer * 5) + '%';
+    }
+
+    function checkAnswer() {
+        const studentAnswer = parseInt(document.getElementById('answerInput').value);
+        if (isNaN(studentAnswer)) {
+            alert("請輸入數字！");
+            return;
+        }
+
+        if (studentAnswer === correctAnswer) {
+            score++;
+        }
+
+        currentTask++;
+        loadTask();
+    }
+
+    function showReport() {
+        document.getElementById('task-screen').classList.add('hidden');
+        document.getElementById('report-screen').classList.remove('hidden');
+        
+        const now = new Date().toLocaleString('zh-HK');
+        document.getElementById('report').innerText = `
+學生姓名：${studentInfo.name}
+班別：${studentInfo.class}
+完成時間：${now}
+---------------------------
+練習項目：尺碼量度 (公分整數)
+總題數：${totalTasks}
+答對題數：${score}
+得分：${Math.round((score/totalTasks)*100)} 分
+---------------------------
+        `;
+    }
+
+    // 支援按 Enter 鍵提交
+    document.getElementById('answerInput').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+            checkAnswer();
+        }
+    });
+</script>
+
+</body>
+</html>
