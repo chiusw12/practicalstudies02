@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>智慧產線：標籤黏貼角度與軸向修正特訓</title>
+    <style>
+        :root {
+            --primary: #34495e;
+            --success: #27ae60;
+            --error: #e74c3c;
+            --warning: #f39c12;
+            --bg: #ecf0f1;
+        }
+        /* 防止 iPad 觸控時出現原生選單或彈跳效果 */
+        * { touch-action: none; -webkit-user-select: none; box-sizing: border-box; }
+        input { touch-action: auto; -webkit-user-select: text; }
+        
+        body { font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; background: var(--bg); margin: 0; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        
+        .overlay { position: fixed; inset: 0; background: white; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; }
+        .hidden { display: none !important; }
+        
+        #game-container { width: 95vw; height: 92vh; max-width: 1050px; background: white; border-radius: 15px; box-shadow: 0 20px 50px rgba(0,0,0,0.15); position: relative; display: flex; border: 5px solid #bdc3c7; }
+        
+        #sidebar { width: 230px; background: #2c3e50; color: white; padding: 20px; display: flex; flex-direction: column; gap: 15px; box-shadow: 3px 0 10px rgba(0,0,0,0.1); }
+        #sidebar h2 { font-size: 1.2em; margin: 0; border-bottom: 2px solid #5d6d7e; padding-bottom: 10px; text-align: center; }
+        .stat-group { font-size: 1.05em; }
+        .stat-val { font-size: 1.4em; color: #f1c40f; font-weight: bold; }
+        
+        #workspace { flex-grow: 1; position: relative; overflow: hidden; background: #ffffff; }
+        
+        /* 工業對位目標框 */
+        .target { 
+            position: absolute; border: 3px dashed; border-radius: 50%; 
+            display: flex; align-items: center; justify-content: center;
+            transition: border-color 0.3s; pointer-events: none;
+        }
+        /* 定位十字絲 */
+        .target::before, .target::after { content: ''; position: absolute; background: currentColor; opacity: 0.25; }
+        .target::before { width: 100%; height: 1px; left: 0; top: 50%; }
+        .target::after { width: 1px; height: 100%; top: 0; left: 50%; }
+
+        /* 動態校正貼紙 */
+        .sticker { 
+            position: absolute; border-radius: 50%; cursor: grab; 
+            z-index: 10; box-shadow: 0 5px 12px rgba(0,0,0,0.25);
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            color: white; font-weight: bold; text-shadow: 1px 1px 2px rgba(0,0,0,0.6);
+            transition: transform 0.15s ease-out, box-shadow 0.1s;
+            border: 2px solid rgba(255,255,255,0.4);
+        }
+        /* 貼紙上的上方校正導向指針（幫助識別旋轉角度） */
+        .sticker::before {
+            content: '▲'; position: absolute; top: 2px; font-size: 10px; color: rgba(255,255,255,0.9);
+        }
+        .sticker.dragging { cursor: grabbing; box-shadow: 0 15px 30px rgba(0,0,0,0.4); z-index: 100; opacity: 0.95; }
+        
+        #btn-area { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+        .action-btn { padding: 14px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 1.05em; color: white; }
+        #check-btn { background: var(--success); }
+        #next-btn { background: #3498db; }
+        
+        .noise { position: absolute; pointer-events: none; opacity: 0.04; font-weight: bold; z-index: 0; color: #000; }
+        
+        .calibration-hint { background: #e8f4f8; border-left: 5px solid #2980b9; padding: 10px; border-radius: 6px; font-size: 0.9em; color: #2c3e50; line-height: 1.4; }
+    </style>
+</head>
+<body>
+ 
+<div id="login-screen" class="overlay">
+    <h1 style="color: var(--primary); margin-bottom:5px;">智慧產線：標籤黏貼角度與軸向修正特訓</h1>
+    <p style="font-size:1.1em; color:#7f8c8d; max-width:580px; line-height:1.6; text-align:left; margin: 15px auto;">
+        <strong>【精密標籤對位規範 (SOP)】</strong><br>
+        1. <strong>中心定位</strong>：拖曳標籤，使其精準對齊相同尺寸、顏色的虛線目標框。<br>
+        2. <strong>軸向校正</strong>：出廠標籤有隨機角度偏轉。放上目標框後，<strong>【輕點/點擊標籤】</strong>可順時針旋轉 $15^\circ$。<br>
+        3. <strong>合格標準</strong>：晶片辨識指針 <strong>▲ 必須朝正上方（$0^\circ$ 或 $360^\circ$）</strong>，角度誤差超過 $\pm 5^\circ$ 將被判定為不良品退件！
+    </p>
+    <input type="text" id="name" placeholder="作業員姓名" style="font-size:1.15em; padding:12px; width:260px; margin:6px; border:2px solid #ccc; border-radius:8px; text-align:center;"><br>
+    <input type="text" id="class" placeholder="工號 / 班別" style="font-size:1.15em; padding:12px; width:260px; margin:6px; border:2px solid #ccc; border-radius:8px; text-align:center;"><br><br>
+    <button onclick="startGame()" style="padding:15px 50px; font-size:1.25em; background:var(--primary); color:white; border:none; border-radius:10px; cursor:pointer; font-weight:bold;">進入自動化產線 (共60題)</button>
+</div>
+ 
+<div id="game-container">
+    <div id="sidebar">
+        <h2>品質檢測進度</h2>
+        <div class="stat-group">當前批次 (題號)：<br><span id="q-num" class="stat-val">1</span> / 60</div>
+        <div class="stat-group">製程合格率 (AOI)：<br><span id="acc-val" class="stat-val">0</span>%</div>
+        <hr style="width:100%; border:0; border-top:1px solid #5d6d7e; margin:5px 0;">
+        <div style="font-size:0.95em; opacity:0.9;">
+            <p><strong>操作員：</strong><br><span id="disp-name"></span></p>
+            <p><strong>當前站別：</strong><br><span id="difficulty-level" style="color:#f1c40f; font-weight:bold;">初級角度校正</span></p>
+        </div>
+        <div class="calibration-hint">
+            💡 <strong>校正密技</strong>：<br>將貼紙拖到目標後，用手指或滑鼠<strong>點擊貼紙</strong>可修正角度，把 ▲ 箭頭調回正上方！
+        </div>
+        <div id="btn-area">
+            <button id="check-btn" class="action-btn" onclick="checkAll()">啟動 AOI 光學檢測</button>
+            <button id="next-btn" class="action-btn hidden" onclick="nextQuestion()">放行至下一站</button>
+        </div>
+    </div>
+    <div id="workspace"></div>
+</div>
+ 
+<div id="result-screen" class="overlay hidden">
+    <h1 id="result-title" style="color:var(--success);">🏆 標籤校正特訓評估報告</h1>
+    <div id="result-body" style="font-size:1.2em; line-height:1.6; margin:20px; text-align:left; background:#f4f5f7; padding:25px; border-radius:12px; border:1px solid #dcdde1; max-width:550px;"></div>
+    <button onclick="location.reload()" style="padding:15px 40px; background:var(--primary); color:white; border:none; border-radius:8px; font-size:1.1em; font-weight:bold; cursor:pointer;">重新自主訓練</button>
+</div>
+ 
+<script>
+    const COLORS = [
+        { name: '紅', hex: '#e74c3c' },
+        { name: '藍', hex: '#3498db' },
+        { name: '綠', hex: '#2ecc71' },
+        { name: '黃', hex: '#f1c40f' },
+        { name: '紫', hex: '#9b59b6' }
+    ];
+    const SIZES = [
+        { name: 'MINI', px: 50 }, 
+        { name: 'STD', px: 75 },
+        { name: 'MAX', px: 100 }
+    ];
+ 
+    let state = {
+        currentQ: 1,
+        totalQ: 60,
+        results: [],
+        targets: [],
+        stickers: [],
+        isLocked: false,
+        studentName: "",
+        studentClass: ""
+    };
+ 
+    function startGame() {
+        state.studentName = document.getElementById('name').value.trim();
+        state.studentClass = document.getElementById('class').value.trim();
+        if(!state.studentName || !state.studentClass) return alert("請填寫作業員資料與工號！");
+        document.getElementById('disp-name').innerText = state.studentName + " (" + state.studentClass + ")";
+        document.getElementById('login-screen').classList.add('hidden');
+        initLevel();
+    }
+ 
+    function initLevel() {
+        state.isLocked = false;
+        const ws = document.getElementById('workspace');
+        ws.innerHTML = "";
+        state.targets = [];
+        state.stickers = [];
+        
+        document.getElementById('q-num').innerText = state.currentQ;
+        document.getElementById('check-btn').classList.remove('hidden');
+        document.getElementById('next-btn').classList.add('hidden');
+ 
+        // 階梯式難度與物件數量設計
+        let difficultyStr = "初級 (單件角度調正)";
+        let stickerCount = 1;
+        let angleRange = 4; // 稍微歪斜
+        
+        if (state.currentQ <= 20) {
+            stickerCount = 1;
+            difficultyStr = "初級 (單件角度調正)";
+            angleRange = 6;
+        } else if (state.currentQ <= 40) {
+            stickerCount = Math.floor(Math.random() * 2) + 2; // 2 ~ 3 個物件
+            difficultyStr = "中級 (多物件複合校正)";
+            angleRange = 12;
+        } else {
+            stickerCount = Math.floor(Math.random() * 2) + 3; // 3 ~ 4 個物件
+            difficultyStr = "高級 (高精密極限對位)";
+            angleRange = 23; // 大範圍歪斜
+        }
+        document.getElementById('difficulty-level').innerText = difficultyStr;
+ 
+        for(let i=0; i < stickerCount; i++) {
+            let color = COLORS[Math.floor(Math.random() * COLORS.length)];
+            let size = SIZES[Math.floor(Math.random() * SIZES.length)];
+            
+            // 隨機分布目標框 (限縮範圍避免重疊邊界)
+            let tx = 260 + Math.random() * (ws.offsetWidth - 420);
+            let ty = 60 + Math.random() * (ws.offsetHeight - 200);
+            
+            const targetEl = document.createElement('div');
+            targetEl.className = 'target';
+            targetEl.style.width = size.px + 'px';
+            targetEl.style.height = size.px + 'px';
+            targetEl.style.left = tx + 'px';
+            targetEl.style.top = ty + 'px';
+            targetEl.style.borderColor = color.hex;
+            targetEl.style.color = color.hex;
+            ws.appendChild(targetEl);
+ 
+            // 左側供料區初始垂直散開排布
+            let sx = 30 + Math.random() * 40;
+            let sy = 40 + (i * 115);
+            
+            // 隨機產生初始歪斜角度 (以 15 度為一個單位，故意轉動不倒正)
+            let randomAngleTick = Math.floor(Math.random() * angleRange) + 2; 
+            if(Math.random() > 0.5) randomAngleTick = -randomAngleTick;
+            let initialAngle = (randomAngleTick * 15) % 360;
+            if(initialAngle < 0) initialAngle += 360;
+ 
+            const stickerEl = document.createElement('div');
+            stickerEl.className = 'sticker';
+            stickerEl.style.width = (size.px - 2) + 'px';
+            stickerEl.style.height = (size.px - 2) + 'px';
+            stickerEl.style.left = sx + 'px';
+            stickerEl.style.top = sy + 'px';
+            stickerEl.style.background = color.hex;
+            // 顯示規格文字與當前旋轉狀態
+            stickerEl.innerHTML = `<span style="font-size:10px;">${size.name}</span>`;
+            
+            // 寫入自訂屬性紀錄當前角度
+            stickerEl.dataset.angle = initialAngle;
+            stickerEl.style.transform = `rotate(${initialAngle}deg)`;
+ 
+            ws.appendChild(stickerEl);
+ 
+            state.targets.push({ id: i, x: tx, y: ty, size: size.px, color: color.hex });
+            state.stickers.push({ id: i, el: stickerEl, size: size.px, color: color.hex, hasDragged: false });
+            
+            makeDraggableAndCalibratable(stickerEl);
+        }
+ 
+        // 中高級加入工業背景視覺干擾黑點
+        if(state.currentQ > 20) {
+            for(let j=0; j<18; j++) {
+                 const n = document.createElement('div');
+                 n.className = 'noise';
+                 n.style.left = Math.random()*100 + "%";
+                 n.style.top = Math.random()*100 + "%";
+                 n.style.fontSize = (Math.random()*30 + 10) + "px";
+                 n.innerText = "✖";
+                 ws.appendChild(n);
+            }
+        }
+    }
+ 
+    // 核心整合函數：同時處理「拖曳對位」與「點擊修正角度」
+    function makeDraggableAndCalibratable(elm) {
+        let p1 = 0, p2 = 0, p3 = 0, p4 = 0;
+        let isMoved = false; // 用來區分是「拖曳」還是「純點擊」
+
+        elm.addEventListener('mousedown', dragStart);
+        elm.addEventListener('touchstart', dragStart, { passive: false });
+
+        // 點擊事件：手動點擊一下順時針轉 15 度修正軸向
+        elm.addEventListener('click', function(e) {
+            if(state.isLocked || isMoved) return; 
+            calibrateAngle(elm);
+        });
+
+        function dragStart(e) {
+            if(state.isLocked) return;
+            isMoved = false; 
+
+            if (e.type === 'touchstart') {
+                 p3 = e.touches[0].clientX;
+                 p4 = e.touches[0].clientY;
+            } else {
+                 p3 = e.clientX;
+                 p4 = e.clientY;
+            }
+ 
+            elm.classList.add('dragging');
+ 
+            document.addEventListener('mousemove', dragMove);
+            document.addEventListener('touchmove', dragMove, { passive: false });
+            document.addEventListener('mouseup', dragEnd);
+            document.addEventListener('touchend', dragEnd);
+        }
+ 
+        function dragMove(e) {
+            e.preventDefault(); 
+            isMoved = true; // 有位移，判定為拖曳行為而非點擊
+ 
+            let clientX, clientY;
+            if (e.type === 'touchmove') {
+                 clientX = e.touches[0].clientX;
+                 clientY = e.touches[0].clientY;
+            } else {
+                 clientX = e.clientX;
+                 clientY = e.clientY;
+            }
+ 
+            p1 = p3 - clientX;
+            p2 = p4 - clientY;
+            p3 = clientX;
+            p4 = clientY;
+ 
+            elm.style.top = (elm.offsetTop - p2) + "px";
+            elm.style.left = (elm.offsetLeft - p1) + "px";
+        }
+ 
+        function dragEnd() {
+            elm.classList.remove('dragging');
+            document.removeEventListener('mousemove', dragMove);
+            document.removeEventListener('touchmove', dragMove);
+            document.removeEventListener('mouseup', dragEnd);
+            document.removeEventListener('touchend', dragEnd);
+        }
+    }
+
+    // 旋轉微調核心邏輯
+    function calibrateAngle(elm) {
+        let currentAngle = parseInt(elm.dataset.angle) || 0;
+        // 每次輕點順時針旋轉 15 度
+        currentAngle = (currentAngle + 15) % 360;
+        elm.dataset.angle = currentAngle;
+        elm.style.transform = `rotate(${currentAngle}deg)`;
+    }
+ 
+    // AOI 光學複合演算法：嚴格核對中心位置距離與終點軸向角度
+    function checkAll() {
+        state.isLocked = true;
+        let totalStickers = state.stickers.length;
+        let perfectMatches = 0;
+        let positionErrors = 0;
+        let angleErrors = 0;
+ 
+        state.stickers.forEach(s => {
+            let sRect = s.el.getBoundingClientRect();
+            let wsRect = document.getElementById('workspace').getBoundingClientRect();
+            
+            // 計算貼紙目前的中心坐標 (相對 workspace)
+            let sx = sRect.left + sRect.width/2 - wsRect.left;
+            let sy = sRect.top + sRect.height/2 - wsRect.top;
+            let currentAngle = parseInt(s.el.dataset.angle) % 360;
+ 
+            let matchedTarget = null;
+            let minDistance = 99999;
+ 
+            // 尋找最近的且規格相符的目標框
+            state.targets.forEach(t => {
+                let tx = t.x + t.size/2;
+                let ty = t.y + t.size/2;
+                let dist = Math.sqrt(Math.pow(sx - tx, 2) + Math.pow(sy - ty, 2));
+                
+                if(s.color === t.color && s.size === t.size) {
+                    if(dist < minDistance) {
+                        minDistance = dist;
+                        matchedTarget = t;
+                    }
+                }
+            });
+ 
+            // 雙重驗證閘門 (AOI 標準門檻)
+            // 1. 位置門檻：圓心距離必須小於 25 像素
+            let isPositionCorrect = (matchedTarget !== null && minDistance < 25);
+            
+            // 2. 角度門檻：▲ 必須歸零，因 360 度等同 0 度，容許誤差上下 5 度
+            let isAngleCorrect = (currentAngle <= 5 || currentAngle >= 355);
+ 
+            if(isPositionCorrect && isAngleCorrect) {
+                perfectMatches++;
+                s.el.style.border = "3px solid #27ae60"; // 綠燈合格
+            } else {
+                s.el.style.border = "3px solid #e74c3c"; // 紅燈不良
+                if(!isPositionCorrect) positionErrors++;
+                if(!isAngleCorrect) angleErrors++;
+            }
+        });
+ 
+        // 計算當前批次良率
+        let currentScore = (perfectMatches / totalStickers) * 100;
+        state.results.push(currentScore);
+        
+        let avgAcc = state.results.reduce((a,b)=>a+b, 0) / state.results.length;
+        document.getElementById('acc-val').innerText = Math.round(avgAcc);
+ 
+        // 側邊欄即時檢測報告
+        let statusHtml = "";
+        if(perfectMatches === totalStickers) {
+            statusHtml = `<span style="color:var(--success)">⭕ 檢測通過！中心與角度完美重合。</span>`;
+        } else {
+            statusHtml = `<span style="color:var(--error)">❌ 檢測失敗 (退件)！<br>`;
+            if(positionErrors > 0) statusHtml += `• 有 ${positionErrors} 處中心偏離軌道<br>`;
+            if(angleErrors > 0) statusHtml += `• 有 ${angleErrors} 處軸向歪斜未調正`;
+            statusHtml += `</span>`;
+        }
+        document.getElementById('task-desc').innerHTML = statusHtml;
+        
+        document.getElementById('check-btn').classList.add('hidden');
+        document.getElementById('next-btn').classList.remove('hidden');
+    }
+ 
+    function nextQuestion() {
+        if(state.currentQ < state.totalQ) {
+            state.currentQ++;
+            initLevel();
+        } else {
+            finishGame();
+        }
+    }
+ 
+    function finishGame() {
+        document.getElementById('game-container').classList.add('hidden');
+        document.getElementById('result-screen').classList.remove('hidden');
+        
+        const now = new Date().toLocaleString('zh-HK');
+        let avg = state.results.reduce((a,b)=>a+b, 0) / state.totalQ;
+        let finalScore = Math.round(avg);
+        
+        let rank = "需重新受訓";
+        if(finalScore >= 95) rank = "🏆 頂級高級校正師（極致精準與手眼協調度）";
+        else if(finalScore >= 80) rank = "👍 優秀操作員（品質符合常規量產標準）";
+        else if(finalScore >= 60) rank = "⚠️ 勉強及格（請再提升對角度校正的敏銳度）";
+ 
+        document.getElementById('result-body').innerHTML = `
+作業員姓名：${state.studentName}<br>
+工號/班別：${state.studentClass}<br>
+結算時間：${now}<br>
+-----------------------------------------<br>
+特訓項目：自動化貼紙角度與軸向修正檢定<br>
+總考核關卡：${state.totalQ} 關<br>
+AOI 綜合平均合格率：<strong>${finalScore}%</strong><br>
+-----------------------------------------<br>
+專業職能評級：<br><strong>${rank}</strong><br><br>
+<span style="color:var(--warning); font-size:0.9em;">※ 練習結束。請舉手請老師前來登記最後良率。</span>
+        `;
+    }
+</script>
+</body>
+</html>
