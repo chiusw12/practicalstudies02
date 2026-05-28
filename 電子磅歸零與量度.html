@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>職場實務練習 - 電子秤歸零與多物件複合量度</title>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --success: #27ae60;
+            --warning: #e67e22;
+            --danger: #e74c3c;
+            --scale-panel: #2c3e50;
+            --metal-plate: #bdc3c7;
+            --bg: #f5f7fa;
+        }
+
+        /* 防止 iPad 觸控時出現原生選單或網頁彈跳 */
+        * { touch-action: none; -webkit-user-select: none; box-sizing: border-box; }
+        input { touch-action: auto; -webkit-user-select: text; }
+
+        body { font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; background: var(--bg); margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+
+        .overlay { position: fixed; inset: 0; background: white; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; }
+        .hidden { display: none !important; }
+
+        #game-container { width: 95vw; height: 92vh; max-width: 1050px; background: white; border-radius: 20px; box-shadow: 0 15px 40px rgba(0,0,0,0.12); border: 4px solid #dcdde1; display: flex; overflow: hidden; }
+
+        /* 側邊進度欄 */
+        #sidebar { width: 220px; background: var(--primary); color: white; padding: 20px; display: flex; flex-direction: column; gap: 15px; box-shadow: 3px 0 10px rgba(0,0,0,0.1); }
+        #sidebar h2 { font-size: 1.2em; margin: 0; border-bottom: 2px solid #4b6584; padding-bottom: 10px; text-align: center; }
+        .stat-group { font-size: 1.05em; }
+        .stat-val { font-size: 1.3em; color: #f1c40f; font-weight: bold; display: inline-block; margin-top: 2px; }
+
+        /* 主要工作區 */
+        #workspace { flex-grow: 1; padding: 20px; display: flex; flex-direction: column; position: relative; background: #ffffff; }
+        
+        /* 任務提示區 */
+        #instruction-bar { background: #e8f4f8; border-left: 6px solid #2980b9; padding: 15px; border-radius: 8px; margin-bottom: 15px; font-size: 1.15em; color: #2c3e50; font-weight: bold; text-align: left; line-height: 1.5; }
+
+        /* 互動區域：左邊為供料區，右邊為磅秤 */
+        .interaction-area { flex-grow: 1; display: flex; gap: 25px; position: relative; }
+        
+        /* 供料區 */
+        .object-pool { width: 200px; border: 2px dashed #b2bec3; border-radius: 12px; background: #fcfcfc; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 40px 10px 10px 10px; position: relative; gap: 15px; overflow: hidden; }
+        .pool-title { position: absolute; top: 10px; font-size: 0.9em; color: #7f8c8d; font-weight: bold; }
+
+        /* 可拖曳物件樣式 - 確保 z-index 比秤盤高，不會被吃掉 */
+        .draggable-obj { width: 85px; height: 85px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: white; font-weight: bold; font-size: 0.85em; padding: 5px; cursor: grab; box-shadow: 0 5px 10px rgba(0,0,0,0.15); z-index: 50; position: absolute; transition: transform 0.1s; }
+        .draggable-obj.dragging { cursor: grabbing; transform: scale(1.1); box-shadow: 0 12px 24px rgba(0,0,0,0.25); z-index: 100; opacity: 0.95; }
+        
+        /* 磅秤垂直分層結構 */
+        .scale-zone { flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        
+        .industrial-scale { display: flex; flex-direction: column; align-items: center; width: 400px; }
+        
+        /* 上方不鏽鋼金屬秤盤 */
+        .scale-pan-top { width: 360px; height: 180px; background: linear-gradient(145deg, #e6e6e6, #cfcfcf); border-radius: 10px; border: 4px solid #95a5a6; border-bottom: 12px solid #7f8c8d; box-shadow: 0 8px 15px rgba(0,0,0,0.15); position: relative; display: flex; align-items: center; justify-content: center; z-index: 10; }
+        .scale-pan-active { background: linear-gradient(145deg, #dcdde1, #b2bec3); border-color: #34495e; }
+        
+        /* 連接中柱 */
+        .scale-neck { width: 60px; height: 25px; background: #7f8c8d; box-shadow: inset 0 5px 5px rgba(0,0,0,0.2); margin: -2px 0; z-index: 2; }
+
+        /* 下方獨立控制與顯示面板 */
+        .scale-base-bottom { width: 380px; background: var(--scale-panel); border-radius: 12px; padding: 15px; box-shadow: 0 10px 20px rgba(0,0,0,0.2); border: 3px solid #34495e; display: flex; flex-direction: column; gap: 12px; z-index: 1; }
+        
+        .scale-display { width: 100%; background: #111; border-radius: 6px; padding: 10px 15px; text-align: right; font-family: 'Courier New', Courier, monospace; color: #00ffcc; font-size: 2.2em; font-weight: bold; box-shadow: inset 0 0 12px rgba(0,0,0,0.9); letter-spacing: 1px; }
+        
+        .scale-controls { width: 100%; display: flex; justify-content: space-between; align-items: center; }
+        .tare-btn { background: #f39c12; color: white; border: none; padding: 12px 25px; font-size: 1.1em; font-weight: bold; border-radius: 6px; cursor: pointer; box-shadow: 0 4px #d35400; transition: 0.1s; }
+        .tare-btn:active { transform: translateY(2px); box-shadow: 0 2px #d35400; }
+        .brand-text { color: #7f8c8d; font-size: 0.85em; font-weight: bold; letter-spacing: 1px; }
+
+        /* 答題輸入區 */
+        .answer-zone { margin-top: 15px; background: #f8f9fa; border: 2px solid #dfe4ea; padding: 15px; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 15px; }
+        .answer-zone label { font-size: 1.15em; font-weight: bold; color: var(--primary); }
+        .weight-input { width: 160px; padding: 10px; font-size: 1.4em; border: 2px solid #ced4da; border-radius: 8px; text-align: center; font-weight: bold; color: #2c3e50; }
+        .weight-input:focus { border-color: #3498db; outline: none; }
+        
+        /* 系統按鈕 */
+        .action-btn { padding: 12px 30px; font-size: 1.15em; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; color: white; transition: 0.2s; }
+        #submit-btn { background: var(--success); }
+        #next-btn { background: #3498db; }
+        
+        /* 反饋訊息 */
+        #feedback-msg { font-size: 1.2em; font-weight: bold; margin-left: 10px; line-height: 1.4; }
+
+        /* 輸入介面優化 */
+        .input-ui { font-size:1.15em; padding:12px; width:260px; margin:8px; border:2px solid #ccc; border-radius:8px; text-align:center; }
+        #report { white-space: pre-wrap; text-align: left; background: #f4f5f7; padding: 25px; border-radius: 12px; font-size: 1.15em; border: 1px solid #dcdde1; line-height: 1.6; max-width: 500px; margin: 15px auto; }
+    </style>
+</head>
+<body>
+
+<div id="login-screen" class="overlay">
+    <h1 style="color: var(--primary); margin-bottom:5px;">電子秤實務特訓 - 階梯多物版</h1>
+    <p style="font-size:1.15em; color:#7f8c8d; max-width:550px; line-height:1.6; text-align:left; margin: 15px auto;">
+        <strong>【工作守則與流程】</strong><br>
+        1. <strong>清空歸零</strong>：在秤盤放上物品前，必須先按 <strong>TARE (歸零)</strong> 重設讀數。<br>
+        2. <strong>精確置物</strong>：將指定數量的物品拖曳到<strong>上方不鏽鋼秤盤</strong>。<br>
+        3. <strong>難度進階</strong>：題目會隨進度變難！後續關卡需**同時放置多個物品**過磅。<br>
+        4. <strong>記錄讀數</strong>：請仔細讀取下方顯示屏的綠色數字並輸入答案。
+    </p>
+    <input type="text" id="studentName" placeholder="學生姓名" class="input-ui"><br>
+    <input type="text" id="studentClass" placeholder="班別" class="input-ui"><br><br>
+    <button onclick="startApp()" style="padding:15px 50px; font-size:1.25em; background:var(--primary); color:white; border:none; border-radius:10px; cursor:pointer; font-weight:bold;">開始實務特訓 (共60題)</button>
+</div>
+
+<div id="game-container">
+    <div id="sidebar">
+        <h2>特訓進度</h2>
+        <div class="stat-group">題號：<br><span id="q-num" class="stat-val">1</span> / 60</div>
+        <div class="stat-group">目前準確度：<br><span id="acc-val" class="stat-val">0</span>%</div>
+        <hr style="width:100%; border:0; border-top:1px solid #4b6584; margin:10px 0;">
+        <div style="font-size:0.95em; opacity:0.9;">
+            <p><strong>操作員：</strong><br><span id="disp-name"></span></p>
+            <p><strong>難度等級：</strong><br><span id="difficulty-level" style="color:#f1c40f; font-weight:bold;">初級 (單件)</span></p>
+        </div>
+    </div>
+    
+    <div id="workspace">
+        <div id="instruction-bar"></div>
+        
+        <div class="interaction-area">
+            <div class="object-pool" id="obj-pool">
+                <span class="pool-title">物料供應區</span>
+            </div>
+            
+            <div class="scale-zone">
+                <div class="industrial-scale">
+                    <div class="scale-pan-top" id="scale-pan"></div>
+                    
+                    <div class="scale-neck"></div>
+                    
+                    <div class="scale-base-bottom">
+                        <div class="scale-display" id="scale-lcd">0.00g</div>
+                        <div class="scale-controls">
+                            <button class="tare-btn" onclick="pressTare()">TARE 歸零</button>
+                            <span class="brand-text">METTLER TECH</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="answer-zone">
+            <label for="answerInput">請輸入量度結果：</label>
+            <input type="number" step="0.01" id="answerInput" class="weight-input" placeholder="0.00" disabled>
+            <label>g</label>
+            <button id="submit-btn" class="action-btn" onclick="checkAnswer()" disabled>提交答案</button>
+            <button id="next-btn" class="action-btn hidden" onclick="nextQuestion()">下一題</button>
+            <span id="feedback-msg"></span>
+        </div>
+    </div>
+</div>
+
+<div id="result-screen" class="overlay hidden">
+    <h1 style="color: var(--success); margin-bottom:5px;">🎉 特訓完成報告</h1>
+    <div id="report"></div>
+    <div style="background-color: var(--warning); color: white; padding: 15px 30px; border-radius: 8px; font-weight: bold; margin-bottom: 20px; font-size:1.1em;">
+        ⚠️ 練習結束。請舉手通知老師前來記錄分數。
+    </div>
+    <button onclick="location.reload()" style="padding:15px 40px; background:var(--primary); color:white; border:none; border-radius:8px; font-size:1.1em; font-weight:bold; cursor:pointer;">重新挑戰</button>
+</div>
+
+<script>
+    const OBJECT_TYPES = [
+        { name: '螺絲包', color: '#e67e22', baseWeight: 12.50 },
+        { name: '塑料零件', color: '#3498db', baseWeight: 7.20 },
+        { name: '金屬晶片', color: '#95a5a6', baseWeight: 22.40 },
+        { name: '化工粉罐', color: '#9b59b6', baseWeight: 41.30 },
+        { name: '橡膠墊片', color: '#2ecc71', baseWeight: 4.80 }
+    ];
+
+    let state = {
+        currentQ: 1,
+        totalQ: 60,
+        correctCount: 0,
+        studentName: "",
+        studentClass: "",
+        requiredItemsCount: 1,  
+        currentQuestionItems: [], 
+        preLoadWeight: 0.00,    
+        isTarePressed: false,   
+        isLocked: false          
+    };
+
+    function startApp() {
+        state.studentName = document.getElementById('studentName').value.trim();
+        state.studentClass = document.getElementById('studentClass').value.trim();
+        if(!state.studentName || !state.studentClass) {
+            return alert("請先填寫學生姓名與班別！");
+        }
+        document.getElementById('disp-name').innerText = `${state.studentName} (${state.studentClass})`;
+        document.getElementById('login-screen').classList.add('hidden');
+        
+        initLevel();
+    }
+
+    function initLevel() {
+        state.isTarePressed = false;
+        state.isLocked = false;
+        state.currentQuestionItems = [];
+        
+        // 階梯式漸進難度
+        let difficultyStr = "初級 (單件過磅)";
+        if (state.currentQ <= 15) {
+            state.requiredItemsCount = 1;
+            difficultyStr = "初級 (單件過磅)";
+        } else if (state.currentQ <= 35) {
+            state.requiredItemsCount = 2;
+            difficultyStr = "中級 (雙物件複合)";
+        } else {
+            state.requiredItemsCount = Math.floor(Math.random() * 2) + 3; 
+            difficultyStr = `高級 (多物組合 x${state.requiredItemsCount})`;
+        }
+        document.getElementById('difficulty-level').innerText = difficultyStr;
+
+        // 生成本題物件數據
+        let itemSummaryTexts = [];
+        for (let i = 0; i < state.requiredItemsCount; i++) {
+            let proto = OBJECT_TYPES[Math.floor(Math.random() * OBJECT_TYPES.length)];
+            let w = parseFloat((proto.baseWeight + Math.random() * 12).toFixed(2));
+            state.currentQuestionItems.push({
+                id: i,
+                name: proto.name,
+                color: proto.color,
+                weight: w,
+                isOnPan: false
+            });
+            itemSummaryTexts.push(`<span style="color:${proto.color}">【${proto.name}】</span>`);
+        }
+
+        state.preLoadWeight = parseFloat((2.00 + Math.random() * 28).toFixed(2));
+
+        document.getElementById('q-num').innerText = state.currentQ;
+        document.getElementById('instruction-bar').innerHTML = `<strong>任務要求：</strong>請將供料區的 ${itemSummaryTexts.join('、')} 共 <strong>${state.requiredItemsCount}</strong> 件物品，【全數】放到上方金屬秤盤上並量度總重量。`;
+        
+        document.getElementById('scale-lcd').innerText = state.preLoadWeight.toFixed(2) + "g";
+        document.getElementById('scale-lcd').style.color = "#ff3333"; 
+        
+        document.getElementById('answerInput').value = '';
+        document.getElementById('answerInput').disabled = true;
+        document.getElementById('submit-btn').disabled = true;
+        document.getElementById('submit-btn').classList.remove('hidden');
+        document.getElementById('next-btn').classList.add('hidden');
+        document.getElementById('feedback-msg').innerText = '';
+
+        setupObjectPool();
+    }
+
+    function setupObjectPool() {
+        // 清空原本的物件（如果有舊的）
+        const oldObjs = document.querySelectorAll('.draggable-obj');
+        oldObjs.forEach(el => el.remove());
+
+        const workspace = document.getElementById('workspace');
+        const pool = document.getElementById('obj-pool');
+        const poolRect = pool.getBoundingClientRect();
+        const wsRect = workspace.getBoundingClientRect();
+
+        state.currentQuestionItems.forEach((item, index) => {
+            const objEl = document.createElement('div');
+            objEl.className = 'draggable-obj';
+            objEl.style.background = item.color;
+            objEl.innerHTML = `<div>${item.name}</div><div style="font-size:0.75em; margin-top:2px; opacity:0.8;">#${index+1}</div>`;
+            
+            // 計算在 workspace 內的絕對座標，防止切換父層時消失
+            let initialLeft = (poolRect.left - wsRect.left) + 55;
+            let initialTop = (poolRect.top - wsRect.top) + 50 + (index * 95);
+            
+            objEl.style.left = initialLeft + "px";
+            objEl.style.top = initialTop + "px";
+            objEl.dataset.itemId = item.id;
+            
+            workspace.appendChild(objEl); // 直接掛在主要工作區，永不消失
+            makeElementDraggable(objEl, item.id, initialLeft, initialTop);
+        });
+    }
+
+    function pressTare() {
+        if(state.isLocked) return;
+        state.isTarePressed = true;
+        let anyItemOnPan = state.currentQuestionItems.some(i => i.isOnPan);
+        
+        if(anyItemOnPan) {
+            document.getElementById('scale-lcd').innerText = "0.00g";
+            document.getElementById('scale-lcd').style.color = "#00ffcc";
+            alert("⚠️ 錯誤操作警告：在有物件的情況下按下 TARE！這會導致無法正確計量所有物品的真實淨重。請清空秤盤後再歸零！");
+        } else {
+            document.getElementById('scale-lcd').innerText = "0.00g";
+            document.getElementById('scale-lcd').style.color = "#00ffcc";
+        }
+    }
+
+    function makeElementDraggable(elm, itemId, originLeft, originTop) {
+        let startX = 0, startY = 0;
+        let initialLeft = 0, initialTop = 0;
+
+        elm.addEventListener('mousedown', dragStart);
+        elm.addEventListener('touchstart', dragStart, { passive: false });
+
+        function dragStart(e) {
+            if(state.isLocked) return;
+            
+            let clientX, clientY;
+            if (e.type === 'touchstart') {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            
+            startX = clientX;
+            startY = clientY;
+            initialLeft = elm.offsetLeft;
+            initialTop = elm.offsetTop;
+
+            elm.classList.add('dragging');
+
+            document.addEventListener('mousemove', dragMove);
+            document.addEventListener('touchmove', dragMove, { passive: false });
+            document.addEventListener('mouseup', dragEnd);
+            document.addEventListener('touchend', dragEnd);
+        }
+
+        function dragMove(e) {
+            e.preventDefault(); 
+            let clientX, clientY;
+            if (e.type === 'touchmove') {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+
+            let deltaX = clientX - startX;
+            let deltaY = clientY - startY;
+
+            elm.style.left = (initialLeft + deltaX) + "px";
+            elm.style.top = (initialTop + deltaY) + "px";
+
+            if(checkCollision(elm)) {
+                document.getElementById('scale-pan').classList.add('scale-pan-active');
+            } else {
+                document.getElementById('scale-pan').classList.remove('scale-pan-active');
+            }
+        }
+
+        function dragEnd() {
+            elm.classList.remove('dragging');
+            document.getElementById('scale-pan').classList.remove('scale-pan-active');
+
+            let itemData = state.currentQuestionItems.find(i => i.id === itemId);
+
+            if(checkCollision(elm)) {
+                // 正確放上不鏽鋼秤盤
+                const pan = document.getElementById('scale-pan');
+                const panRect = pan.getBoundingClientRect();
+                const wsRect = document.getElementById('workspace').getBoundingClientRect();
+                
+                let panCenterX = (panRect.left + panRect.width/2 - wsRect.left) - 42;
+                let panCenterY = (panRect.top + panRect.height/2 - wsRect.top) - 42;
+                
+                // 散開排布，避免多物重疊
+                let offsetX = (itemId - (state.requiredItemsCount-1)/2) * 65;
+                let offsetY = (Math.random() * 20) - 10;
+
+                elm.style.left = (panCenterX + offsetX) + "px";
+                elm.style.top = (panCenterY + offsetY) + "px";
+                itemData.isOnPan = true;
+            } else {
+                // 放錯位置或移開，彈回原本的左側欄位
+                elm.style.left = originLeft + "px";
+                elm.style.top = originTop + "px";
+                itemData.isOnPan = false;
+            }
+
+            updateScaleDisplay();
+            
+            // 檢查是否所有物件都放上去了
+            let allOnPan = state.currentQuestionItems.every(i => i.isOnPan);
+            if(allOnPan) {
+                document.getElementById('answerInput').disabled = false;
+                document.getElementById('submit-btn').disabled = false;
+            } else {
+                document.getElementById('answerInput').disabled = true;
+                document.getElementById('submit-btn').disabled = true;
+            }
+
+            document.removeEventListener('mousemove', dragMove);
+            document.removeEventListener('touchmove', dragMove);
+            document.removeEventListener('mouseup', dragEnd);
+            document.removeEventListener('touchend', dragEnd);
+        }
+    }
+
+    function checkCollision(elm) {
+        const pan = document.getElementById('scale-pan');
+        const r1 = elm.getBoundingClientRect();
+        const r2 = pan.getBoundingClientRect();
+        
+        let cx = r1.left + r1.width/2;
+        let cy = r1.top + r1.height/2;
+        
+        return (cx >= r2.left && cx <= r2.right && cy >= r2.top && cy <= r2.bottom);
+    }
+
+    function updateScaleDisplay() {
+        const lcd = document.getElementById('scale-lcd');
+        let totalItemsWeightOnPan = state.currentQuestionItems
+                                    .filter(i => i.isOnPan)
+                                    .reduce((sum, i) => sum + i.weight, 0);
+
+        if(totalItemsWeightOnPan > 0) {
+            if(state.isTarePressed) {
+                lcd.innerText = totalItemsWeightOnPan.toFixed(2) + "g";
+            } else {
+                let combined = totalItemsWeightOnPan + state.preLoadWeight;
+                lcd.innerText = combined.toFixed(2) + "g";
+            }
+        } else {
+            if(state.isTarePressed) {
+                lcd.innerText = "0.00g";
+                lcd.style.color = "#00ffcc";
+            } else {
+                lcd.innerText = state.preLoadWeight.toFixed(2) + "g";
+                lcd.style.color = "#ff3333";
+            }
+        }
+    }
+
+    function checkAnswer() {
+        if(state.isLocked) return;
+
+        const inputVal = parseFloat(document.getElementById('answerInput').value);
+        if(isNaN(inputVal)) {
+            alert("請輸入量度讀數！");
+            return;
+        }
+
+        state.isLocked = true;
+        const msgEl = document.getElementById('feedback-msg');
+        let targetTotalTrueWeight = state.currentQuestionItems.reduce((sum, i) => sum + i.weight, 0);
+
+        if(!state.isTarePressed) {
+            msgEl.style.color = "var(--danger)";
+            msgEl.innerHTML = `❌ 操作失誤！流程不合規範：<br>放置任何物品前，必須先按 <strong>TARE 歸零</strong> 扣除殘留雜重！`;
+        } else if(Math.abs(inputVal - targetTotalTrueWeight) > 0.015) {
+            msgEl.style.color = "var(--danger)";
+            msgEl.innerHTML = `❌ 讀數錯誤！<br>秤盤上多物加總正確讀數應為 <strong>${targetTotalTrueWeight.toFixed(2)}</strong> g`;
+        } else {
+            msgEl.style.color = "var(--success)";
+            msgEl.innerHTML = `⭕ 完美正確！<br>成功在 <strong>${state.requiredItemsCount}物複合情境</strong> 下完成標準歸零與精密計重。`;
+            state.correctCount++;
+        }
+
+        let currentAcc = (state.correctCount / state.currentQ) * 100;
+        document.getElementById('acc-val').innerText = Math.round(currentAcc);
+
+        document.getElementById('submit-btn').classList.add('hidden');
+        document.getElementById('next-btn').classList.remove('hidden');
+    }
+
+    function nextQuestion() {
+        if(state.currentQ < state.totalQ) {
+            state.currentQ++;
+            initLevel();
+        } else {
+            showFinalReport();
+        }
+    }
+
+    function showFinalReport() {
+        document.getElementById('game-container').classList.add('hidden');
+        document.getElementById('result-screen').classList.remove('hidden');
+        
+        const now = new Date().toLocaleString('zh-HK');
+        let finalScore = Math.round((state.correctCount / state.totalQ) * 100);
+        
+        let evaluation = "";
+        if(finalScore >= 95) evaluation = "🏆 頂級倉管量度員（具備極佳的流程規範與多物計重高專注力）";
+        else if(finalScore >= 75) evaluation = "👍 優秀（具備良好的實務操作水平）";
+        else evaluation = "⚠️ 需加強注意：請嚴格遵守「先空秤歸零、後置物讀數」的SOP。";
+
+        document.getElementById('report').innerText = `
+學生姓名：${state.studentName}
+班別：${state.studentClass}
+結算時間：${now}
+-----------------------------------------
+練習項目：電子秤分層歸零與多物階梯特訓
+總考核題數：${state.totalQ} 題
+符合標準程序且答對題數：${state.correctCount} 題
+最終評估得分：${finalScore} 分
+-----------------------------------------
+專業職場能力評級：
+${evaluation}
+        `;
+    }
+
+    document.getElementById('answerInput').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter' && !state.isLocked && !document.getElementById('submit-btn').disabled) {
+            checkAnswer();
+        }
+    });
+</script>
+</body>
+</html>
