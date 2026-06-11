@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="zh-HK">
+<head>
+ <meta charset="utf-8" />
+ <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+ <title>Sorting Station - 職場實務練習</title>
+ <style>
+   :root{
+     --bg:#0b1020;
+     --panel:#141b33;
+     --ink:#eaf0ff;
+     --muted:#aab6e6;
+     --good:#2fe6a6;
+     --bad:#ff6b6b;
+     --card:#ffffff;
+   }
+   *{ box-sizing:border-box; }
+   body{
+     margin:0;
+     font-family: system-ui, -apple-system, "PingFang TC", "Noto Sans CJK TC", Arial, sans-serif;
+     background:linear-gradient(180deg,#0b1020,#050713);
+     color:var(--ink);
+     touch-action:none;
+     -webkit-user-select:none;
+     user-select:none;
+   }
+   .wrap{
+     max-width: 980px;
+     margin: 0 auto;
+     padding: 16px 14px 22px;
+   }
+   .top{
+     display:flex;
+     gap:12px;
+     align-items:stretch;
+     flex-wrap:wrap;
+   }
+   .panel{
+     background:rgba(20,27,51,.95);
+     border:1px solid rgba(255,255,255,.08);
+     border-radius:14px;
+     padding:12px;
+     box-shadow:0 10px 30px rgba(0,0,0,.35);
+   }
+   .hud{ flex: 1 1 320px; }
+   .hud h1{
+     font-size:18px; margin:0 0 6px;
+     letter-spacing:.5px;
+   }
+   .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+   .pill{
+     background:rgba(255,255,255,.06);
+     border:1px solid rgba(255,255,255,.10);
+     padding:8px 10px;
+     border-radius:999px;
+     color:var(--muted);
+     font-size:13px;
+     line-height:1;
+   }
+   .rule{
+     margin-top:10px;
+     padding:10px 12px;
+     border-radius:12px;
+     background:rgba(255,255,255,.06);
+     border:1px solid rgba(255,255,255,.10);
+   }
+   .rule .label{ font-size:12px; color:var(--muted); }
+   .rule .text{ font-size:16px; margin-top:4px; font-weight: bold; color: #ffd34d; }
+   .controls{ flex: 0 1 260px; display: flex; flex-direction: column; gap: 8px; }
+   button{
+     width:100%;
+     padding:12px 12px;
+     border-radius:12px;
+     border:1px solid rgba(255,255,255,.10);
+     background:rgba(255,255,255,.08);
+     color:var(--ink);
+     font-size:16px;
+     cursor: pointer;
+   }
+   button:disabled { opacity: 0.3; cursor: not-allowed; }
+   button.primary{ background:rgba(47,230,166,.18); border-color:rgba(47,230,166,.35); }
+   button.danger{ background:rgba(255,107,107,.18); border-color:rgba(255,107,107,.35); }
+   button:active:not(:disabled){ transform:scale(.99); }
+   .board{
+     display:grid;
+     grid-template-columns: 1fr;
+     gap:14px;
+     margin-top:14px;
+   }
+   .bins{
+     display:grid;
+     gap:12px;
+     grid-template-columns: repeat(2, 1fr);
+   }
+   .bin{
+     min-height:160px;
+     border-radius:16px;
+     padding:12px;
+     border:2px dashed rgba(255,255,255,.18);
+     background:rgba(255,255,255,.03);
+     display: flex;
+     flex-direction: column;
+     align-items: center;
+   }
+   .binTitle{
+     font-size:14px;
+     color:var(--muted);
+     display:flex;
+     justify-content:space-between;
+     align-items:center;
+     width: 100%;
+     border-bottom: 1px solid rgba(255,255,255,0.05);
+     padding-bottom: 6px;
+     margin-bottom: 8px;
+   }
+   .binHint{
+     font-size:12px;
+     opacity:.9;
+   }
+   .bin-content {
+     display: flex;
+     flex-wrap: wrap;
+     gap: 8px;
+     justify-content: center;
+     align-content: flex-start;
+     width: 100%;
+     flex-grow: 1;
+   }
+   .items{
+     display:flex;
+     flex-wrap:wrap;
+     gap:12px;
+     justify-content:flex-start;
+     align-content:flex-start;
+     min-height:150px;
+     padding: 10px;
+     background: rgba(0,0,0,0.15);
+     border-radius: 10px;
+   }
+   .card{
+     width:105px;
+     height:105px;
+     background:var(--card);
+     border-radius:18px;
+     border:2px solid rgba(0,0,0,.08);
+     display:flex;
+     flex-direction: column;
+     align-items:center;
+     justify-content:center;
+     position:relative;
+     box-shadow:0 10px 18px rgba(0,0,0,.25);
+     touch-action:none;
+     cursor: grab;
+   }
+   .card:active { cursor: grabbing; }
+   
+   /* 幾何形狀與大小系統 */
+   .item-visual {
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     box-shadow: inset 0 0 6px rgba(0,0,0,0.2);
+   }
+   .shape-circle { border-radius: 50%; }
+   .shape-square { border-radius: 8px; }
+   .shape-triangle { clip-path: polygon(50% 0%, 0% 100%, 100% 100%); }
+   
+   /* 三級尺寸調整（包含臨界值意圖） */
+   .size-S { width: 36px; height: 36px; font-size: 16px; }
+   .size-M { width: 54px; height: 54px; font-size: 24px; }
+   .size-L { width: 74px; height: 74px; font-size: 32px; }
+
+   .card .tag{
+     position:absolute;
+     bottom:4px;
+     font-size:11px;
+     color:rgba(0,0,0,.6);
+     background:rgba(0,0,0,.06);
+     padding:1px 6px;
+     border-radius:999px;
+     white-space: nowrap;
+   }
+   .floating{ 
+     position:fixed !important; 
+     z-index:9999; 
+     pointer-events: none; 
+     opacity: 0.9;
+     transform: scale(1.05);
+     box-shadow: 0 15px 25px rgba(0,0,0,0.4);
+   }
+   .shake{ animation:shake .25s linear 0s 2; }
+   @keyframes shake{
+     0%{ transform:translateX(0); }
+     25%{ transform:translateX(-6px); }
+     50%{ transform:translateX(6px); }
+     75%{ transform:translateX(-4px); }
+     100%{ transform:translateX(0); }
+   }
+   .result{
+     margin-top:10px;
+     font-size:15px;
+     color:var(--muted);
+     min-height:22px;
+   }
+   @media (min-width: 600px){
+     .bins.grid3{ grid-template-columns: repeat(3, 1fr); }
+     .bins.grid4{ grid-template-columns: repeat(4, 1fr); }
+   }
+ </style>
+</head>
+<body>
+ <div class="wrap">
+   <div class="top">
+     <div class="panel hud">
+       <h1>職場實務練習：分類分揀（Sorting Station）</h1>
+       <div class="row">
+         <div class="pill">題目：<span id="qNow">1</span>/<span id="qTotal">60</span></div>
+         <div class="pill">難度：Lv <span id="lvNow">1</span>/6</div>
+         <div class="pill">平均準確度：<span id="avgAcc">0</span>%</div>
+       </div>
+       <div class="rule">
+         <div class="label">本題分類規則</div>
+         <div class="text" id="ruleText">—</div>
+       </div>
+       <div class="result" id="resultText"></div>
+     </div>
+     <div class="panel controls">
+       <button class="primary" id="btnCheck">檢查答案</button>
+       <button id="btnNext" disabled>下一題</button>
+       <button class="danger" id="btnRestart">重新開始</button>
+     </div>
+   </div>
+ 
+   <div class="board">
+     <div class="panel">
+       <div class="bins" id="bins"></div>
+     </div>
+     <div class="panel">
+       <div class="items" id="items"></div>
+     </div>
+   </div>
+ </div>
+ 
+ <script>
+   // ===== Config =====
+   const TOTAL_Q = 60;
+   const ITEMS_PER_LEVEL = [3,4,4,5,6,6];
+   const BINCOUNT_PER_LEVEL = [2,3,3,3,4,4];
+ 
+   // 視覺屬性定義
+   const COLORS = [
+     { id:"red",    name:"紅", hex:"#ff4d4d", emoji:"🔴" },
+     { id:"blue",   name:"藍", hex:"#4da3ff", emoji:"🔵" },
+     { id:"yellow", name:"黃", hex:"#ffd34d", emoji:"🟡" },
+     { id:"green",  name:"綠", hex:"#2fe6a6", emoji:"🟢" },
+   ];
+   const SHAPES = [
+     { id:"circle",   name:"圓形", emoji:"⚪" },
+     { id:"square",   name:"方形", emoji:"⬛" },
+     { id:"triangle", name:"三角形", emoji:"🔺" },
+   ];
+   const SIZES = [
+     { id:"S", name:"小" },
+     { id:"M", name:"中" },
+     { id:"L", name:"大" },
+   ];
+   const TYPES = [
+     { id:"stationery", name:"文具", emoji:"✏️" },
+     { id:"tableware",  name:"餐具", emoji:" Spoon" },
+   ];
+ 
+   // ===== State =====
+   let currentQ = 1;
+   let placed = new Map(); // itemId -> binId
+   let answerKey = new Map(); // itemId -> correctBinId
+   let totalCorrect = 0;
+   let totalItemsSeen = 0;
+   let locked = false;
+ 
+   // DOM Elements
+   const elQNow = document.getElementById("qNow");
+   const elQTotal = document.getElementById("qTotal");
+   const elLvNow = document.getElementById("lvNow");
+   const elAvgAcc = document.getElementById("avgAcc");
+   const elRuleText = document.getElementById("ruleText");
+   const elResultText = document.getElementById("resultText");
+   const elBins = document.getElementById("bins");
+   const elItems = document.getElementById("items");
+   const btnCheck = document.getElementById("btnCheck");
+   const btnNext = document.getElementById("btnNext");
+   const btnRestart = document.getElementById("btnRestart");
+ 
+   elQTotal.textContent = String(TOTAL_Q);
+ 
+   function difficultyFor(q){
+     return Math.floor((q - 1) / 10) + 1;
+   }
+ 
+   function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+ 
+   // 根據難度生成符合教育設計的卡片數據
+   function makeItem(i, level){
+     let color = pick(COLORS.slice(0, 2));
+     let shape = SHAPES[0]; // 預設圓形
+     let size = SIZES[1];  // 預設中型
+     let type = TYPES[0];  // 預設文具
+ 
+     if(level === 1){
+       color = pick(COLORS.slice(0, 2)); // 只有紅藍
+       shape = SHAPES[0]; // 固定的形狀避免干擾
+     } else if(level === 2){
+       color = pick(COLORS.slice(0, 3)); // 紅藍黃
+       shape = pick(SHAPES); // 加入形狀干擾
+     } else if(level === 3){
+       color = pick(COLORS.slice(0, 3)); // 加入顏色干擾
+       shape = pick(SHAPES); // 目標是形狀
+     } else if(level === 4){
+       color = pick(COLORS.slice(0, 3));
+       shape = SHAPES[0];
+       size = pick(SIZES); // 核心：大/中/小 訓練
+     } else if(level === 5){
+       color = pick(COLORS.slice(0, 2)); // 紅藍
+       type = pick(TYPES); // 核心：文具與餐具
+     } else {
+       // Level 6 全混合
+       color = pick(COLORS);
+       shape = pick(SHAPES);
+       size = pick(SIZES);
+       type = pick(TYPES);
+     }
+ 
+     return {
+       id: `item_${currentQ}_${i}`,
+       color, shape, size, type
+     };
+   }
+ 
+   function ruleFor(level){
+     if(level === 1 || level === 2) return { kind:"color", label:"請按「顏色」分類" };
+     if(level === 3) return { kind:"shape", label:"請按「幾何形狀」分類" };
+     if(level === 4) return { kind:"size",  label:"請按「尺寸大小（大/中/小）」分類" };
+     if(level === 5) return { kind:"typeColor", label:"雙重規則：先看「類別」，再看「顏色」" };
+     
+     // Level 6: 隨機規則切換
+     const kinds = ["color","shape","size","type"];
+     const k = pick(kinds);
+     const labelMap = {
+       color:"【規則切換】請按「顏色」分類",
+       shape:"【規則切換】請按「幾何形狀」分類",
+       size:"【規則切換】請按「尺寸大小」分類",
+       type:"【規則切換】請按「物品功能類別（文具/餐具）」分類",
+     };
+     return { kind:k, label:labelMap[k] };
+   }
+ 
+   function buildBins(level, rule){
+     const binCount = BINCOUNT_PER_LEVEL[level-1];
+     let bins = [];
+ 
+     if(rule.kind === "color"){
+       bins = COLORS.slice(0, binCount).map(c => ({ id:`bin_color_${c.id}`, title:`${c.name}色箱`, hint:c.emoji, match: (item)=> item.color.id===c.id }));
+     }else if(rule.kind === "shape"){
+       bins = SHAPES.slice(0, binCount).map(s => ({ id:`bin_shape_${s.id}`, title:`${s.name}箱`, hint:s.emoji, match: (item)=> item.shape.id===s.id }));
+     }else if(rule.kind === "size"){
+       bins = SIZES.slice(0, binCount).map(s => ({ id:`bin_size_${s.id}`, title:`${s.name}物件箱`, hint:"📐", match: (item)=> item.size.id===s.id }));
+     }else if(rule.kind === "type"){
+       bins = TYPES.slice(0, 2).map(t => ({ id:`bin_type_${t.id}`, title:`${t.name}專用箱`, hint:t.emoji, match: (item)=> item.type.id===t.id }));
+     }else if(rule.kind === "typeColor"){
+       const c2 = COLORS.slice(0, 2); // 紅、藍
+       for(const t of TYPES){
+         for(const c of c2){
+           bins.push({
+              id:`bin_tc_${t.id}_${c.id}`,
+              title:`${t.name}-${c.name}`,
+              hint:`${t.emoji}${c.emoji}`,
+              match:(item)=> item.type.id===t.id && item.color.id===c.id
+           });
+         }
+       }
+     }
+     return bins;
+   }
+ 
+   function renderBins(bins){
+     elBins.innerHTML = "";
+     elBins.classList.remove("grid3","grid4");
+     if(bins.length === 3) elBins.classList.add("grid3");
+     if(bins.length === 4) elBins.classList.add("grid4");
+ 
+     bins.forEach(b=>{
+       const d = document.createElement("div");
+       d.className = "bin";
+       d.dataset.binId = b.id;
+       d.innerHTML = `
+         <div class="binTitle">
+           <div>${b.title}</div>
+           <div class="binHint">${b.hint ?? ""}</div>
+         </div>
+         <div class="bin-content"></div>
+       `;
+       elBins.appendChild(d);
+     });
+   }
+ 
+   function renderItems(items, rule){
+     elItems.innerHTML = "";
+     placed.clear();
+     answerKey.clear();
+ 
+     items.forEach((it)=>{
+       const card = document.createElement("div");
+       card.className = "card";
+       card.dataset.itemId = it.id;
+       
+       // 動態 CSS 圖形構造
+       const visual = document.createElement("div");
+       visual.className = `item-visual shape-${it.shape.id} size-${it.size.id}`;
+       visual.style.backgroundColor = it.color.hex;
+       
+       // 只有當關卡與種類相關或是後段混合關時，在圖形內顯示 Emoji 強化特徵
+       if(rule.kind === "type" || rule.kind === "typeColor" || level6TypeShow(it, rule)){
+         visual.textContent = it.type.emoji;
+       }
+       
+       // 文字標籤，輔助自查與確認
+       const tag = document.createElement("div");
+       tag.className = "tag";
+       tag.textContent = `${it.shape.name}(${it.size.name})`;
+       if(rule.kind === "type" || rule.kind === "typeColor") tag.textContent = it.type.name;
+ 
+       card.appendChild(visual);
+       card.appendChild(tag);
+       elItems.appendChild(card);
+       makeDraggable(card);
+     });
+   }
+   
+   function level6TypeShow(it, rule) {
+     return difficultyFor(currentQ) === 6 && rule.kind === "type";
+   }
+ 
+   function computeAnswerKey(items, bins){
+     items.forEach(it=>{
+       const b = bins.find(x=>x.match(it));
+       answerKey.set(it.id, b ? b.id : null);
+     });
+   }
+ 
+   // ===== 核心改進：Pointer Events 拖拽引擎 =====
+   let drag = null;
+ 
+   function makeDraggable(el){
+     el.addEventListener("pointerdown", onStart);
+   }
+ 
+   function onStart(e){
+     if(locked) return;
+     if(e.pointerType === "mouse" && e.button !== 0) return; // 僅允許滑鼠左鍵
+     
+     const target = e.currentTarget;
+     const r = target.getBoundingClientRect();
+     
+     drag = {
+       el: target,
+       itemId: target.dataset.itemId,
+       pointerId: e.pointerId,
+       offsetX: e.clientX - r.left,
+       offsetY: e.clientY - r.top,
+       width: r.width,
+       height: r.height
+     };
+ 
+     target.setPointerCapture(e.pointerId);
+     target.classList.add("floating");
+     
+     // 即時定位
+     target.style.left = (e.clientX - drag.offsetX) + "px";
+     target.style.top = (e.clientY - drag.offsetY) + "px";
+     target.style.width = drag.width + "px";
+     target.style.height = drag.height + "px";
+ 
+     target.addEventListener("pointermove", onMove);
+     target.addEventListener("pointerup", onEnd);
+     target.addEventListener("pointercancel", onEnd);
+   }
+ 
+   function onMove(e){
+     if(!drag || drag.pointerId !== e.pointerId) return;
+     drag.el.style.left = (e.clientX - drag.offsetX) + "px";
+     drag.el.style.top = (e.clientY - drag.offsetY) + "px";
+   }
+ 
+   function onEnd(e){
+     if(!drag || drag.pointerId !== e.pointerId) return;
+     
+     const target = drag.el;
+     target.removeEventListener("pointermove", onMove);
+     target.removeEventListener("pointerup", onEnd);
+     target.removeEventListener("pointercancel", onEnd);
+     
+     try { target.releasePointerCapture(e.pointerId); } catch(err){}
+ 
+     // 計算卡片中心點坐標
+     const cardRect = target.getBoundingClientRect();
+     const itemCenter = {
+       x: cardRect.left + cardRect.width / 2,
+       y: cardRect.top + cardRect.height / 2
+     };
+ 
+     // 檢查碰撞：是否進入了某個分類箱的矩形區域內
+     const binElements = document.querySelectorAll(".bin");
+     let bestBin = null;
+ 
+     for (const binEl of binElements) {
+       const bRect = binEl.getBoundingClientRect();
+       if (
+         itemCenter.x >= bRect.left &&
+         itemCenter.x <= bRect.right &&
+         itemCenter.y >= bRect.top &&
+         itemCenter.y <= bRect.bottom
+       ) {
+         bestBin = { el: binEl, id: binEl.dataset.binId };
+         break;
+       }
+     }
+ 
+     // 還原固定定位樣式
+     target.classList.remove("floating");
+     target.style.left = "";
+     target.style.top = "";
+     target.style.width = "";
+     target.style.height = "";
+ 
+     if(bestBin){
+       const contentEl = bestBin.el.querySelector(".bin-content");
+       contentEl.appendChild(target);
+       placed.set(drag.itemId, bestBin.id);
+     }else{
+       elItems.appendChild(target);
+       placed.delete(drag.itemId);
+     }
+     drag = null;
+   }
+ 
+   // ===== 遊戲流程與防呆邏輯 =====
+   function vibrate(ms){
+     try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e){}
+   }
+ 
+   function startQuestion(){
+     locked = false;
+     btnCheck.disabled = false;
+     btnNext.disabled = true;
+     elResultText.textContent = "";
+     elQNow.textContent = String(currentQ);
+     
+     const level = difficultyFor(currentQ);
+     elLvNow.textContent = String(level);
+ 
+     const rule = ruleFor(level);
+     elRuleText.textContent = rule.label;
+ 
+     const itemCount = ITEMS_PER_LEVEL[level-1];
+     const items = Array.from({length:itemCount}, (_,i)=> makeItem(i+1, level));
+     const bins = buildBins(level, rule);
+ 
+     renderBins(bins);
+     renderItems(items, rule);
+     computeAnswerKey(items, bins);
+   }
+ 
+   function checkAnswer(){
+     if(locked) return;
+     
+     let correct = 0;
+     let total = 0;
+     const wrongEls = [];
+ 
+     for(const [itemId, correctBinId] of answerKey.entries()){
+       total += 1;
+       const placedBinId = placed.get(itemId) ?? null;
+       const ok = (placedBinId && correctBinId && placedBinId === correctBinId);
+       if(ok) correct += 1;
+       else{
+         const el = document.querySelector(`[data-item-id="${itemId}"]`);
+         if(el) wrongEls.push(el);
+       }
+     }
+ 
+     totalCorrect += correct;
+     totalItemsSeen += total;
+ 
+     const avg = totalItemsSeen ? Math.round((totalCorrect/totalItemsSeen)*100) : 0;
+     elAvgAcc.textContent = String(avg);
+ 
+     elResultText.innerHTML = `本題得分：<span style="color:${correct===total?'var(--good)':'var(--bad)'}; font-weight:bold;">${correct} / ${total}</span>`;
+ 
+     // 錯誤反饋：震動 + 抖動並彈回下方集貨區
+     if(wrongEls.length){
+       vibrate(80);
+       wrongEls.forEach(el=>{
+         el.classList.remove("shake");
+         void el.offsetWidth; // 觸發重繪
+         el.classList.add("shake");
+         placed.delete(el.dataset.itemId);
+         setTimeout(()=>{ elItems.appendChild(el); }, 450);
+       });
+     }else{
+       vibrate(30);
+     }
+ 
+     // 檢查完畢後，鎖定本題操作並開放下一題
+     locked = true;
+     btnCheck.disabled = true;
+     btnNext.disabled = false;
+   }
+ 
+   function nextQuestion(){
+     if(currentQ >= TOTAL_Q){
+       const avg = totalItemsSeen ? Math.round((totalCorrect/totalItemsSeen)*100) : 0;
+       elResultText.innerHTML = `🎉 恭喜完成全部練習！最終平均準確度：<span style="color:var(--good); font-weight:bold;">${avg}%</span>`;
+       locked = true;
+       btnCheck.disabled = true;
+       btnNext.disabled = true;
+       return;
+     }
+     currentQ += 1;
+     startQuestion();
+   }
+ 
+   function restart(){
+     currentQ = 1;
+     totalCorrect = 0;
+     totalItemsSeen = 0;
+     elAvgAcc.textContent = "0";
+     startQuestion();
+   }
+ 
+   btnCheck.addEventListener("click", checkAnswer);
+   btnNext.addEventListener("click", nextQuestion);
+   btnRestart.addEventListener("click", restart);
+ 
+   // 初始化第一題
+   startQuestion();
+ </script>
+</body>
+</html>
